@@ -93,7 +93,7 @@ services:
       retries: 3
 
   redis:
-    image: redis:5.0-alpine@sha256:1a3c609295332f1ce603948142a132656c92a08149d7096e203058533c415b8c
+    image: redis:8.10-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     restart: unless-stopped
     expose:
       - "6379"
