@@ -21,3 +21,9 @@ php -l "$C/common.php.new" > /dev/null
 sed -i "s/'enablePjax' => false/'enablePjax' => true/" "$C/common.php.new"
 mv "$C/common.php.new" "$C/common.php"
 chown nginx:nginx "$C/common.php"
+
+# Pinned Appearance values (colours, custom SCSS in the .env) enter the theme
+# only when HumHub compiles it, and the console cache flush does not trigger
+# that. Dropping the compiled stylesheet makes the next page build it again
+# with the current pins, so a config change takes effect on restart.
+find /var/www/localhost/htdocs/assets -path "*/resources/css/theme.css*" -type f -delete 2>/dev/null || true
