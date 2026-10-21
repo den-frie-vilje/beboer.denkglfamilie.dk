@@ -188,6 +188,11 @@ the stock theme takes over.
 6. Merge `staging` into `main`, wait for the build, rename the `sites.d` file
    back, and run the agent: `sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production`.
 7. Log in, read Administration, Information, update the marketplace modules.
+   Once, at the first go-live: install the dark-mode module as on spejdernet,
+   in the running stack:
+   ```sh
+   docker compose -p beboer-denkglfamilie-dk-production -f deploy/compose.production.yml --env-file /volume1/docker/beboer.denkglfamilie.dk/production/production.env exec -w /var/www/localhost/htdocs/protected humhub sh -c "php yii module/install dark-mode && php yii module/enable dark-mode && php yii settings/set dark-mode showButton 1 && php yii cache/flush-all"
+   ```
 8. At the first cutover: point the DSM reverse-proxy vhost of the production
    domain at `localhost:<HUMHUB_PORT>` of the new stack.
 
