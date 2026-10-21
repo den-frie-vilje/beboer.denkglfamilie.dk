@@ -65,6 +65,7 @@ services:
       # mounted here as a single folder when it exists.
       - "${DATA_DIR}/humhub/config:/var/www/localhost/htdocs/protected/config"
       - "${DATA_DIR}/humhub/php-pages:/var/www/localhost/htdocs/php-pages"
+      - "../deploy/entrypoint.d/10-common-config.sh:/docker-entrypoint.d/10-common-config.sh:ro"
     depends_on:
       db:
         condition: service_healthy
@@ -77,7 +78,7 @@ services:
       retries: 3
 
   db:
-    image: mariadb:10.4@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3
+    image: mariadb:10.11@sha256:0d0945c57f75b3a3b9ebe71aedaaad005fa5305054e8fca3d2e42a8c92b43b5e
     restart: unless-stopped
     # The server default used to be latin1_swedish_ci, which module tables
     # inherited. New tables now default to what HumHub recommends.
@@ -85,7 +86,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: humhub
-      # Runs mysql_upgrade when the data directory comes from an older server.
+      # Runs the system-table upgrade when the data directory comes from an
+      # older server (10.4 on spejdernet, 10.2 on beboer).
       MARIADB_AUTO_UPGRADE: 1
       TZ: Europe/Copenhagen
     volumes:
