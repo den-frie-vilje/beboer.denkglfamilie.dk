@@ -1,14 +1,26 @@
-# HumHub 1.18.6. Bump both Dockerfiles together; the branch decides the environment
+# HumHub 1.19.0. Bump both Dockerfiles together; the branch decides the environment
 # (staging builds from the staging branch, production from main).
 # The digest is the manifest-list digest Docker Hub shows for the tag.
 # The stack that ran before this repository was 1.15.2, whose image is no
 # longer published; 1.15.6 is the last 1.15, so onboarding production to the
 # agent is a patch update.
-FROM docker.io/jeremyvies/humhub:1.18.6-phponly@sha256:a7a6bc1ecd6dcfe6ecab13b595e80ca34899d6dfd4fdd1efed820c7120fab935
+FROM docker.io/jeremyvies/humhub:1.19.0-phponly@sha256:8cda8faeaf8801706373d0b86b4007c2e9a01233b8bcda61bc434f8dae40f0eb
 # Alpine security updates at build time, so a PHP or nginx fix ships as soon as
 # Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
 # the workflow by hand (workflow_dispatch) to pick up a new fix.
 RUN apk --no-cache upgrade
+# Alpine committed php85 8.5.12 (the fix for CVE-2026-109618 and CVE-2026-109619)
+# but had not published the package on the night of the advisory, so the same
+# package built from Alpine's own 3.24 recipe by den-frie-vilje/nas-sites
+# (workflow "Build php85 from aports", release php85-8.5.12-r0) is installed
+# instead: only the php85 packages the image already has, verified against the
+# pinned checksum and the shipped signing key. Remove this block once the
+# upgrade above brings 8.5.12 from Alpine.
+RUN wget -qO /tmp/php85.tar.gz https://github.com/den-frie-vilje/nas-sites/releases/download/php85-8.5.12-r0/php85-8.5.12-r0-x86_64.tar.gz \
+ && echo "9dc9ad86d9b067671cc5f0f1af639557963d8ed47fcabdb736fadc5ba3655dbb  /tmp/php85.tar.gz" | sha256sum -c \
+ && mkdir /tmp/php85 && tar -xzf /tmp/php85.tar.gz -C /tmp/php85 && cp /tmp/php85/*.rsa.pub /etc/apk/keys/ \
+ && cd /tmp/php85 && apk add --no-cache $(for p in $(apk info | grep '^php85'); do [ -f "$p-8.5.12-r0.apk" ] && echo "$p-8.5.12-r0.apk"; done) \
+ && rm -rf /tmp/php85 /tmp/php85.tar.gz && php -v | grep -q 'PHP 8.5.12'
 # ImageMagick's HEIC/AVIF and WebP coders are separate Alpine packages that the
 # upstream image does not install, so iPhone photos got no previews.
 RUN apk --no-cache add imagemagick-heic imagemagick-webp
