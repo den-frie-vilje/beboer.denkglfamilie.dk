@@ -110,10 +110,27 @@ copy carries everything written since. From then on the old directory is the rol
 sudo /volume1/docker/beboer.denkglfamilie.dk/repo/tools/refresh-staging.sh [intermediate phponly image ...]
 ```
 
-Production keeps running; its database is dumped in a single transaction and
-its files are copied with rsync. The copy is then migrated through any
-intermediate images given (see `deploy/ladder.yml`), neutralised, and
-started. The first refresh copies everything; later ones copy the delta.
+A running production is dumped in a single transaction and its files are
+copied with rsync; a production at rest has its database files copied. The
+copy is then migrated through any intermediate images given (see
+`deploy/ladder.yml`), with the marketplace modules updated to each core on
+the way, neutralised, and started. The first refresh copies everything;
+later ones copy the delta.
+
+Beboer's copy comes from 1.15.2 and HumHub advises against skipping minor
+versions, so the refresh runs the ladder:
+
+```sh
+sudo /volume1/docker/beboer.denkglfamilie.dk/repo/tools/refresh-staging.sh \
+  docker.io/jeremyvies/humhub:1.16.2-phponly@sha256:74d74f81857232167e51291f2272995f519c62a3366f045dcb798ef3178a5e04 \
+  docker.io/jeremyvies/humhub:1.17.5-phponly@sha256:3c09fc19a52e7f1dcca302d4e4c94c60a0b9d47f1e24a84fc1a8b43c2e7b110e
+```
+
+It updates every module to its release for each core on the way and
+uninstalls theme-builder, which has no release after 1.17. The Kongeligt
+theme it produced is a Bootstrap 3 theme; 1.18 moved HumHub to Bootstrap 5
+and Sass, so staging at 1.18.6 shows whether Kongeligt needs a rewrite or
+the stock theme takes over.
 
 ## Service window for production
 
