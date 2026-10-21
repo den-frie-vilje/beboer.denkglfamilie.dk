@@ -23,5 +23,7 @@ if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$SHIPPED" ]; then
     || { echo "pre-start: the dump failed, not migrating" >&2; rm -f "$SQL"; exit 1; }
   grep -q '^-- Dump completed' "$SQL" || { echo "pre-start: the dump is incomplete, not migrating" >&2; exit 1; }
   gzip "$SQL"
+  # Read by deploy/entrypoint.d/20-update-modules.sh once the core is migrated.
+  touch "$CONFIG/.modules-need-update"
 fi
 exec /docker-entrypoint.sh "$@"

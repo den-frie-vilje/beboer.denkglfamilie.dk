@@ -26,7 +26,9 @@ builds `production-latest`. An upgrade is:
    marketplace modules, send a test mail and read it in the catcher.
 3. Merge `staging` into `main` in a service window. The merge is the deploy:
    the agent pulls within a few minutes, the image dumps the database
-   (`deploy/pre-start.sh`), and the migrations run against production.
+   (`deploy/pre-start.sh`), the migrations run against production, and the
+   marketplace modules are updated to their releases for the new core
+   (`deploy/entrypoint.d/20-update-modules.sh`).
 
 Every push of the Dockerfiles is checked before anything is built
 (`tools/check-version.sh`): both files at one version, the digests as Docker
@@ -54,6 +56,7 @@ the new version answers.
 | `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `deploy/pre-start.sh` | The image's entrypoint: dumps the database before an upgrade migrates it |
+| `deploy/entrypoint.d/20-update-modules.sh` | Updates the marketplace modules once, after a core upgrade has migrated |
 | `tools/check-version.sh` | The version-bump check the workflows run before building |
 | `tools/fix-collation.sh` | Converts the database default and every table to utf8mb4_unicode_ci, before HumHub migrates |
 | `.github/workflows/deploy-<env>.yml` | Checks the version bump, then builds and signs that environment's images when the Dockerfiles change |
