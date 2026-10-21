@@ -56,7 +56,7 @@ fi
 
 for IMG in "$@"; do
   echo "5/6 migrating through $IMG, then updating the marketplace modules to that core"
-  LADDER_IMAGE="$IMG" stage -f "$REPO/deploy/ladder.yml" run --rm humhub php yii marketplace/update-all
+  LADDER_IMAGE="$IMG" stage -f "$REPO/deploy/ladder.yml" run --rm humhub php yii module/update-all
 done
 
 echo "6/6 neutralising the copy: mail to the catcher, push module removed, staging base URL, modules updated"
@@ -68,9 +68,9 @@ stage run --rm humhub sh -c "
   php yii settings/set base mailerPassword '' &&
   php yii settings/set base mailerEncryption '' &&
   php yii settings/set base baseUrl $STAGE_HOST &&
-  (php yii marketplace/remove fcm-push || true) &&
-  (php yii marketplace/remove theme-builder || true) &&
-  php yii marketplace/update-all &&
+  php yii module/remove fcm-push &&
+  php yii module/remove theme-builder &&
+  php yii module/update-all &&
   php yii cache/flush"
 stage up -d --wait
 echo "staging is up on $STAGE_HOST"
