@@ -153,6 +153,28 @@ The cutover is the service window below, with one extra step at the start:
 stop the old stack, and rerun `tools/copy-from-legacy.sh --database` so the
 copy carries everything written since. From then on the old directory is the rollback, until it is deleted.
 
+## Go-live
+
+The one-off cutover from the old stack, after production has been copied,
+converted and migrated as above and parked behind the maintenance page.
+
+1. Rerun "Deploy to staging" and "Deploy to production" by hand (Actions,
+   Run workflow) so `apk upgrade` takes the current Alpine packages; this is
+   how a PHP fix reaches the image. Check it: `docker run --rm --entrypoint php ghcr.io/den-frie-vilje/beboer-humhub:production-latest -v`.
+2. Enable the agent: rename `/volume1/docker/nas-sites/sites.d/beboer.denkglfamilie.dk.production.env.disabled`
+   back to `.env`.
+3. Run it: `sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production`.
+   The first start dumps the database if the version changed, migrates, and
+   starts nginx on `localhost:<HUMHUB_PORT>`.
+4. Point the Web Station portal of `beboer.denkglfamilie.dk` at that port instead of the
+   `maintenance` service.
+5. Log in, read Administration, Information.
+6. Stop and later delete the old stack; its directory is the rollback until then.
+7. The modules update themselves at this start, since the version changes
+   from 1.18.6 to 1.19.0; read Administration, Information. Install dark mode
+   once, as the service window describes.
+8. Send a test mail; the transport (smtp.netsite.dk) comes over with the data.
+
 ## Refreshing staging
 
 ```sh
