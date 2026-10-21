@@ -24,14 +24,19 @@ builds `production-latest`. An upgrade is:
    migrations on the copied data.
 2. Rehearse on staging: log in, read Administration, Information, update the
    marketplace modules, send a test mail and read it in the catcher.
-3. In a service window, back production up, then merge `staging` into `main`.
-   The merge is the deploy: the agent pulls within a few minutes and the
-   migrations run against production.
+3. Merge `staging` into `main` in a service window. The merge is the deploy:
+   the agent pulls within a few minutes, the image dumps the database
+   (`deploy/pre-start.sh`), and the migrations run against production.
 
-Rollback is the backup: stop the stack, restore the database directory and
-the config directory from the backup, revert the merge so `production-latest`
-moves back, and let the agent start it. Nothing shortens the window itself;
-the data is frozen from the backup to the moment the new version answers.
+Every push of the Dockerfiles is checked before anything is built
+(`tools/check-version.sh`): both files at one version, the digests as Docker
+Hub serves them for that tag, the image's own version file matching, and no
+minor version skipped, which HumHub advises against. Dependabot opens patch
+bumps as one pull request for both files.
+
+Rollback is the dump: see "Rollback" under the service window. Nothing
+shortens the window itself; the data is frozen from the dump to the moment
+the new version answers.
 
 ## Layout
 
@@ -48,8 +53,11 @@ the data is frozen from the backup to the moment the new version answers.
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
 | `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
+| `deploy/pre-start.sh` | The image's entrypoint: dumps the database before an upgrade migrates it |
+| `tools/check-version.sh` | The version-bump check the workflows run before building |
 | `tools/fix-collation.sh` | Converts the database default and every table to utf8mb4_unicode_ci, before HumHub migrates |
-| `.github/workflows/deploy-<env>.yml` | Builds and signs that environment's images when the Dockerfiles change |
+| `.github/workflows/deploy-<env>.yml` | Checks the version bump, then builds and signs that environment's images when the Dockerfiles change |
+| `.github/workflows/check-version.yml` | The same check on a pull request |
 
 The copy script places the theme's login background where 1.18 keeps its own
 (`uploads/login-bg/background.png`), and the theme's one rule, the logo width on
@@ -148,15 +156,18 @@ copy carries everything written since. From then on the old directory is the rol
 sudo /volume1/docker/beboer.denkglfamilie.dk/repo/tools/refresh-staging.sh [intermediate phponly image ...]
 ```
 
-A running production is dumped in a single transaction and its files are
-copied with rsync; a production at rest has its database files copied. The
-copy is then migrated through any intermediate images given (see
-`deploy/ladder.yml`), with the marketplace modules updated to each core on
-the way, neutralised, and started. The first refresh copies everything;
-later ones copy the delta.
+That is the whole of it: run it whenever staging should test against today's
+data. A running production is dumped in a single transaction and its files
+are copied with rsync; a production at rest has its database files copied.
+The copy is neutralised and started; when staging's branch is a version ahead
+of production, the start migrates the copy, as the production deploy will. The
+first refresh copies everything; later ones copy the delta. Only a jump of
+more than one minor version needs intermediate images, which are run as a
+migration ladder (see `deploy/ladder.yml`) with the marketplace modules
+updated to each core on the way.
 
-Beboer's copy comes from 1.15.2 and HumHub advises against skipping minor
-versions, so the refresh runs the ladder:
+Before the first go-live, beboer's copy came from 1.15.2, so the refresh ran
+the ladder:
 
 ```sh
 sudo /volume1/docker/beboer.denkglfamilie.dk/repo/tools/refresh-staging.sh \
@@ -178,9 +189,9 @@ the stock theme takes over.
    (from `/volume1/docker/beboer.denkglfamilie.dk/repo` with the compose file and env file, as
    the agent runs it). At the first cutover this is the old stack instead,
    followed by the final copy from "Onboarding from the existing stack".
-3. Back up `db/data` and `humhub/config` under the data directory. On
-   Btrfs, `cp -a --reflink=always` is instant; otherwise rsync to a sibling
-   directory.
+3. Copy `humhub/config` under the data directory to a sibling directory.
+   The database needs no copy: the image dumps it into
+   `humhub/config/backups` before it migrates.
 4. If staging needed a ladder, run the same images against production with
    `deploy/ladder.yml` now, one after the other.
 5. Start the database alone and run the collation fix (below), before any
@@ -195,6 +206,24 @@ the stock theme takes over.
    ```
 8. At the first cutover: point the DSM reverse-proxy vhost of the production
    domain at `localhost:<HUMHUB_PORT>` of the new stack.
+
+### Rollback
+
+The dump in `humhub/config/backups` is named after the version it holds and
+the version that was about to migrate it. To go back: stop the stack, revert
+the merge on `main` and wait for the build, recreate the database from the
+dump, then let the agent start the old version again. The old image finds a
+newer version file, dumps once more, runs no migrations it does not know, and
+writes its own version file back.
+
+```sh
+cd /volume1/docker/beboer.denkglfamilie.dk/repo
+PROD="docker compose -p beboer-denkglfamilie-dk-production -f deploy/compose.production.yml --env-file /volume1/docker/beboer.denkglfamilie.dk/production/production.env"
+sudo $PROD down
+sudo $PROD up -d --wait db
+zcat /volume1/docker/beboer.denkglfamilie.dk/production/data/humhub/config/backups/humhub-OLD-before-NEW-*.sql.gz | sudo $PROD exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "DROP DATABASE humhub; CREATE DATABASE humhub" && mysql -uroot -p"$MYSQL_ROOT_PASSWORD" humhub'
+sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production
+```
 
 ### Collation fix
 

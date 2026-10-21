@@ -10,11 +10,21 @@ name: Deploy to production
 on:
   push:
     branches: [main]
-    paths: [deploy/Dockerfile.humhub, deploy/Dockerfile.nginx]
+    paths: [deploy/Dockerfile.humhub, deploy/Dockerfile.nginx, deploy/pre-start.sh]
   workflow_dispatch:
 
 jobs:
+  # The version check gates the build: both Dockerfiles at one version, digests
+  # as Docker Hub serves them, no skipped minor since the previous commit.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - run: tools/check-version.sh "${{ github.event.before }}"
   humhub:
+    needs: check
     uses: den-frie-vilje/nas-sites/.github/workflows/build-and-sign.yml@v1
     with:
       environment: production

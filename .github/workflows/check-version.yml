@@ -1,0 +1,18 @@
+# Runs tools/check-version.sh on a pull request that touches the Dockerfiles,
+# comparing against the branch it targets. The deploy workflows run the same
+# check before they build, so a bad bump is never signed.
+
+name: Check version bump
+
+on:
+  pull_request:
+    paths: [deploy/Dockerfile.humhub, deploy/Dockerfile.nginx, deploy/pre-start.sh]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - run: tools/check-version.sh "${{ github.event.pull_request.base.sha }}"

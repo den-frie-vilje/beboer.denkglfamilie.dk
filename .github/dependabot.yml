@@ -11,6 +11,11 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # One pull request for both Dockerfiles: the version check refuses a
+    # humhub image and an nginx image at different versions.
+    groups:
+      humhub:
+        patterns: [jeremyvies/humhub]
     ignore:
       # Minor and major HumHub versions are a rehearsed upgrade, not a bump;
       # see README.md. Patch releases are fine.
