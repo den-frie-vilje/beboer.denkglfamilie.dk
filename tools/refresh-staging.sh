@@ -48,11 +48,11 @@ fi
 
 echo "3/6 copying files (uploads, config, modules, themes, assets)"
 mkdir -p "$S_DATA/humhub"
-rsync -a --delete "$P_DATA/humhub/" "$S_DATA/humhub/"
+rsync -a --delete --exclude=@eaDir --exclude="#recycle" "$P_DATA/humhub/" "$S_DATA/humhub/"
 
 if [ -n "$AT_REST" ]; then
   echo "4/6 copying the database files"
-  rsync -a --delete "$P_DATA/db/data/" "$S_DATA/db/data/"
+  rsync -a --delete --exclude=@eaDir --exclude="#recycle" "$P_DATA/db/data/" "$S_DATA/db/data/"
   stage up -d --wait db
   "$REPO/tools/fix-collation.sh" staging
 else
