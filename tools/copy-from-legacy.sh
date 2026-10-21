@@ -24,6 +24,15 @@ rsync -a --delete "$OLD/unprotected_uploads/"      "$NEW/humhub/uploads/"
 rsync -a --delete "$OLD/modules/"  "$NEW/humhub/modules/"
 rsync -a --delete "$OLD/themes/"   "$NEW/humhub/themes/"
 rsync -a --delete "$OLD/config/"   "$NEW/humhub/config/"
+# dynamic.php still carries 1.15-era component blocks (mailer with the
+# netsite credentials, a Redis connection with a password the new stack's
+# Redis does not have, cache, queue). HumHub 1.18 no longer writes them and
+# the regenerated common.php supplies Redis, cache and queue; a stale mailer
+# block would otherwise survive the merge with the mail settings.
+for block in mailer redis cache queue; do
+  sed -i "/^    '$block' => $/,/^    ),$/d" "$NEW/humhub/config/dynamic.php"
+done
+grep -q "'db' =>" "$NEW/humhub/config/dynamic.php" || { echo "dynamic.php lost its db block; stopping" >&2; exit 1; }
 
 mkdir -p "$NEW/humhub/assets" "$NEW/humhub/php-pages"
 

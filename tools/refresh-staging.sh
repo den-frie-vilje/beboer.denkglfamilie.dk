@@ -20,6 +20,15 @@ read_var() { grep -E "^$2=" "$1" | cut -d= -f2- | tr -d '"'; }
 P_DATA=$(read_var "$P_ENV" DATA_DIR)
 S_DATA=$(read_var "$S_ENV" DATA_DIR)
 [ -n "$P_DATA" ] && [ -n "$S_DATA" ] && [ "$P_DATA" != "$S_DATA" ] || { echo "DATA_DIR missing or identical in $P_ENV and $S_ENV" >&2; exit 1; }
+# Keep the agent away while the copy is half done: it starts any stack whose
+# sites.d file exists and whose containers are down, and a half-copied
+# staging would run with production's mail settings.
+SITES_D=/volume1/docker/nas-sites/sites.d
+AGENT_FILE=$SITES_D/$DOMAIN.staging.env
+if [ -f "$AGENT_FILE" ]; then
+  mv "$AGENT_FILE" "$AGENT_FILE.refreshing"
+  trap 'mv "$AGENT_FILE.refreshing" "$AGENT_FILE"' EXIT
+fi
 prod() { docker compose -p beboer-denkglfamilie-dk-production -f "$REPO/deploy/compose.production.yml" --env-file "$P_ENV" "$@"; }
 stage() { docker compose -p beboer-denkglfamilie-dk-staging -f "$REPO/deploy/compose.staging.yml" --env-file "$S_ENV" "$@"; }
 
