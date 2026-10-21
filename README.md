@@ -51,7 +51,12 @@ the data is frozen from the backup to the moment the new version answers.
 | `tools/fix-collation.sh` | Converts the database default and every table to utf8mb4_unicode_ci, before HumHub migrates |
 | `.github/workflows/deploy-<env>.yml` | Builds and signs that environment's images when the Dockerfiles change |
 
-The stacks mount no theme folder. Kongeligt is a Bootstrap 3 theme built with
+The copy script places the theme's login background where 1.18 keeps its own
+(`uploads/login-bg/background.png`), and the theme's one rule, the logo width on
+the login page, is pinned as custom SCSS in `deploy/humhub.<env>.env`. The six
+colours the upgrade copies into Appearance are the theme's: primary `#284764`,
+accent `#6fdbe8`, success `#97d271`, warning `#fdd198`, danger `#ff8989`, light
+`#ededed`. The stacks mount no theme folder. Kongeligt is a Bootstrap 3 theme built with
 the deprecated theme-builder module; the 1.18 upgrade retires it and switches
 the site to the stock theme, carrying six colours over into Appearance. The
 old files stay in the data directory under `humhub/themes/Kongeligt` for the
