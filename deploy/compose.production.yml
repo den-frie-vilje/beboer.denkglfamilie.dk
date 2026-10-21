@@ -66,6 +66,8 @@ services:
       - "${DATA_DIR}/humhub/config:/var/www/localhost/htdocs/protected/config"
       - "${DATA_DIR}/humhub/php-pages:/var/www/localhost/htdocs/php-pages"
       - "../deploy/entrypoint.d/10-common-config.sh:/docker-entrypoint.d/10-common-config.sh:ro"
+      - "../deploy/common.site.php:/var/www/localhost/htdocs/protected/config/common.site.php:ro"
+      - "../deploy/humhub.production.env:/var/www/localhost/htdocs/.env:ro"
     depends_on:
       db:
         condition: service_healthy

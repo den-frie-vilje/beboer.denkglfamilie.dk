@@ -42,7 +42,9 @@ the data is frozen from the backup to the moment the new version answers.
 | `deploy/compose.staging.yml` | The same stack plus the mail catcher |
 | `deploy/<env>.env.example` | Template for the env file on the NAS |
 | `deploy/nas-sites/beboer.denkglfamilie.dk.<env>.env` | The agent's config for that environment, on record |
-| `deploy/entrypoint.d/10-common-config.sh` | Regenerates `common.php` from the image's factory on every start, so cache, queue, Redis and the host come from the environment |
+| `deploy/entrypoint.d/10-common-config.sh` | Regenerates `common.php` from the image's factory and `common.site.php` on every start |
+| `deploy/common.site.php` | The site's own PHP configuration, merged over the generated `common.php` |
+| `deploy/humhub.<env>.env` | HumHub's own `.env`: scalar configuration and pinned settings per environment |
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
 | `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
@@ -79,6 +81,27 @@ The operator runs these by hand; the agent has no write access to any of it.
    for staging. The stacks bind to loopback only. The mail catcher's UI is on
    `localhost:<MAILCATCHER_PORT>`; reach it through an SSH tunnel or a vhost
    of its own.
+
+## Site configuration
+
+Three kinds of configuration, three places:
+
+- **PHP configuration that only code can express**, such as the display-name
+  callback: `deploy/common.site.php`, merged over the generated `common.php`
+  on every start. `common.php` itself is regenerated from the image's factory
+  by `deploy/entrypoint.d/10-common-config.sh`, so hand edits to it are lost.
+- **Scalar configuration and pinned settings**: `deploy/humhub.<env>.env`,
+  HumHub's own `.env`, mounted into the web root. `HUMHUB_WEB_CONFIG__...`
+  and `HUMHUB_CONFIG__...` set configuration; `HUMHUB_FIXED_SETTINGS__<module>__<name>`
+  pins a database setting so that it wins over the setting table and is locked
+  in the admin interface. Staging pins its mailer to the catcher and its base
+  URL this way.
+- **Everything else is data** in the database and the data directory:
+  Appearance, module settings, profile fields, `dynamic.php` with the database
+  connection, `web.php` and `console.php`.
+
+To add a customisation, decide which of the three it is, change the file on
+`staging`, and promote it with the next staging to main pull request.
 
 ## Onboarding from the existing stack
 
