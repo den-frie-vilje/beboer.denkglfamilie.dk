@@ -1,7 +1,7 @@
-# HumHub 1.15.6. Bump both Dockerfiles together; the branch decides the environment
+# HumHub 1.18.6. Bump both Dockerfiles together; the branch decides the environment
 # (staging builds from the staging branch, production from main).
 # The digest is the manifest-list digest Docker Hub shows for the tag.
 # The stack that ran before this repository was 1.15.2, whose image is no
 # longer published; 1.15.6 is the last 1.15, so onboarding production to the
 # agent is a patch update.
-FROM docker.io/jeremyvies/humhub:1.15.6-phponly@sha256:5b202e2194b9a58c631bf768157608d32fa9b2d0373a01d277cef4c3c043f8bc
+FROM docker.io/jeremyvies/humhub:1.18.6-phponly@sha256:a7a6bc1ecd6dcfe6ecab13b595e80ca34899d6dfd4fdd1efed820c7120fab935
