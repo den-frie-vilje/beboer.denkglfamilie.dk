@@ -19,7 +19,9 @@ services:
       - "${DATA_DIR}/humhub/uploads:/var/www/localhost/htdocs/uploads"
       - "${DATA_DIR}/humhub/assets:/var/www/localhost/htdocs/assets"
       - "${DATA_DIR}/humhub/modules:/var/www/localhost/htdocs/protected/modules"
-      - "${DATA_DIR}/humhub/themes:/var/www/localhost/htdocs/themes"
+      # No theme mount: the Kongeligt theme is a Bootstrap 3 theme that 1.18
+      # retires; the stock theme ships in the image. A rewritten Kongeligt is
+      # mounted here as a single folder when it exists.
     depends_on:
       - humhub
     healthcheck:
@@ -57,7 +59,9 @@ services:
       - "${DATA_DIR}/humhub/uploads:/var/www/localhost/htdocs/uploads"
       - "${DATA_DIR}/humhub/assets:/var/www/localhost/htdocs/assets"
       - "${DATA_DIR}/humhub/modules:/var/www/localhost/htdocs/protected/modules"
-      - "${DATA_DIR}/humhub/themes:/var/www/localhost/htdocs/themes"
+      # No theme mount: the Kongeligt theme is a Bootstrap 3 theme that 1.18
+      # retires; the stock theme ships in the image. A rewritten Kongeligt is
+      # mounted here as a single folder when it exists.
       - "${DATA_DIR}/humhub/config:/var/www/localhost/htdocs/protected/config"
       - "${DATA_DIR}/humhub/php-pages:/var/www/localhost/htdocs/php-pages"
     depends_on:
