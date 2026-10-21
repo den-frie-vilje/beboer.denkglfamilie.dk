@@ -37,6 +37,12 @@ done
 grep -q "'db' =>" "$NEW/humhub/config/dynamic.php" || { echo "dynamic.php lost its db block; stopping" >&2; exit 1; }
 
 mkdir -p "$NEW/humhub/assets" "$NEW/humhub/php-pages"
+# The Kongeligt theme painted the login page with its own background image;
+# 1.18 retires the theme and has a built-in login background that lives at
+# uploads/login-bg/background.png (HumHub's LoginBackgroundImageHelper).
+mkdir -p "$NEW/humhub/uploads/login-bg"
+cp "$OLD/themes/Kongeligt/img/login-bg.png" "$NEW/humhub/uploads/login-bg/background.png"
+chown -R 100:101 "$NEW/humhub/uploads/login-bg"
 
 if [ "${1:-}" = "--database" ]; then
   if /usr/local/bin/docker ps --format '{{.Names}}' | grep -qx "$OLD_DB_CONTAINER"; then
