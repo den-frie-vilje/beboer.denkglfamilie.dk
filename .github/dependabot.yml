@@ -1,0 +1,27 @@
+# Upstream versions arrive as pull requests against staging: new HumHub
+# images (the FROM lines in deploy/) and new MariaDB, Redis and MailCatcher
+# digests (the compose files). Merging one builds staging; the staging to
+# main pull request then publishes it after the rehearsal. Dependabot keeps
+# the tag and the digest together.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /deploy
+    target-branch: staging
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      # Minor and major HumHub versions are a rehearsed upgrade, not a bump;
+      # see README.md. Patch releases are fine.
+      - dependency-name: jeremyvies/humhub
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    target-branch: staging
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      - dependency-name: mariadb
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
