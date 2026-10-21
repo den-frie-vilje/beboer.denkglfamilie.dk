@@ -17,6 +17,7 @@ C=/var/www/localhost/htdocs/protected/config
   printf ';\n$site = __DIR__ . "/common.site.php";\nreturn is_file($site) ? \\yii\\helpers\\ArrayHelper::merge($common, require $site) : $common;\n'
 } > "$C/common.php.new"
 php -l "$C/common.php.new" > /dev/null
+[ ! -f "$C/common.site.php" ] || php -l "$C/common.site.php" > /dev/null
 sed -i "s/'enablePjax' => false/'enablePjax' => true/" "$C/common.php.new"
 mv "$C/common.php.new" "$C/common.php"
 chown nginx:nginx "$C/common.php"
