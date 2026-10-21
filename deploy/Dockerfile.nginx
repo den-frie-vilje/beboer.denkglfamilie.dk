@@ -4,3 +4,9 @@ FROM docker.io/jeremyvies/humhub:1.19.0-nginx@sha256:84aeb50039f0c7d93632b494210
 # Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
 # the workflow by hand (workflow_dispatch) to pick up a new fix.
 RUN apk --no-cache upgrade
+# Plain HTTP answers with a redirect to HTTPS. DSM's reverse proxy marks the
+# scheme in X-Forwarded-Proto, so an HTTP rule in DSM for the site's name,
+# pointing at the same port as the HTTPS rule, ends up here; the health check
+# (no such header) is unaffected. The config is only testable at container
+# start, when the upstream entrypoint has filled in its values.
+RUN sed -i '/server_name _ default;/a\        if ($http_x_forwarded_proto = "http") { return 301 https://$host$request_uri; }' /etc/nginx/nginx.conf
