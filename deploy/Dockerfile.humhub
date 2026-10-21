@@ -12,3 +12,9 @@ RUN apk --no-cache upgrade
 # ImageMagick's HEIC/AVIF and WebP coders are separate Alpine packages that the
 # upstream image does not install, so iPhone photos got no previews.
 RUN apk --no-cache add imagemagick-heic imagemagick-webp
+# The database is dumped before every upgrade migration; see deploy/pre-start.sh.
+RUN apk --no-cache add mariadb-client
+COPY --chmod=755 deploy/pre-start.sh /usr/local/bin/pre-start
+ENTRYPOINT ["/usr/local/bin/pre-start"]
+# ENTRYPOINT resets the image's CMD, so it is repeated from upstream.
+CMD ["supervisord", "-n", "-c", "/etc/supervisord.conf"]
