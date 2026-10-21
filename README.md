@@ -42,7 +42,7 @@ the data is frozen from the backup to the moment the new version answers.
 | `deploy/compose.staging.yml` | The same stack plus the mail catcher |
 | `deploy/<env>.env.example` | Template for the env file on the NAS |
 | `deploy/nas-sites/beboer.denkglfamilie.dk.<env>.env` | The agent's config for that environment, on record |
-| `deploy/entrypoint.d/10-common-config.sh` | Regenerates `common.php` from the image's factory on every start, since the site's own file predates the image |
+| `deploy/entrypoint.d/10-common-config.sh` | Regenerates `common.php` from the image's factory on every start, so cache, queue, Redis and the host come from the environment |
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
 | `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
