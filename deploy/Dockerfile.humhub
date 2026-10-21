@@ -9,3 +9,6 @@ FROM docker.io/jeremyvies/humhub:1.18.6-phponly@sha256:a7a6bc1ecd6dcfe6ecab13b59
 # Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
 # the workflow by hand (workflow_dispatch) to pick up a new fix.
 RUN apk --no-cache upgrade
+# ImageMagick's HEIC/AVIF and WebP coders are separate Alpine packages that the
+# upstream image does not install, so iPhone photos got no previews.
+RUN apk --no-cache add imagemagick-heic imagemagick-webp
