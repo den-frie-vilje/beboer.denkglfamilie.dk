@@ -6,8 +6,8 @@
 #
 # Any images given are run as a migration ladder (deploy/ladder.yml) between
 # the copy and the start of staging's own version. A running production is
-# dumped with a single transaction; a production that is not running (before
-# the first cutover) has its database files copied as they are.
+# dumped with a single transaction; a production that is not running has its
+# database files copied as they are.
 set -eu
 
 DOMAIN=beboer.denkglfamilie.dk

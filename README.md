@@ -34,7 +34,10 @@ Every push of the Dockerfiles is checked before anything is built
 (`tools/check-version.sh`): both files at one version, the digests as Docker
 Hub serves them for that tag, the image's own version file matching, and no
 minor version skipped, which HumHub advises against. Dependabot opens patch
-bumps as one pull request for both files.
+bumps as one pull request for both files. A fix in the base image's
+packages, PHP included, needs no version bump: rerun the environment's
+deploy workflow by hand (Actions, Run workflow), the build's `apk upgrade`
+takes the current packages, and the agent pulls the new image.
 
 Rollback is the dump: see "Rollback" under the service window. Nothing
 shortens the window itself; the data is frozen from the dump to the moment
@@ -53,7 +56,6 @@ the new version answers.
 | `deploy/common.site.php` | The site's own PHP configuration, merged over the generated `common.php` |
 | `deploy/humhub.<env>.env` | HumHub's own `.env`: scalar configuration and pinned settings per environment |
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
-| `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `deploy/pre-start.sh` | The image's entrypoint: dumps the database before an upgrade migrates it |
 | `deploy/entrypoint.d/20-update-modules.sh` | Updates the marketplace modules once, after a core upgrade has migrated |
@@ -62,17 +64,16 @@ the new version answers.
 | `.github/workflows/deploy-<env>.yml` | Checks the version bump, then builds and signs that environment's images when the Dockerfiles change |
 | `.github/workflows/check-version.yml` | The same check on a pull request |
 
-The copy script places the theme's login background where 1.18 keeps its own
-(`uploads/login-bg/background.png`), and the theme's one rule, the logo width on
-the login page, is pinned as custom SCSS in `deploy/humhub.<env>.env`. The six
-colours the upgrade copies into Appearance are the theme's: primary `#284764`,
-accent `#6fdbe8`, success `#97d271`, warning `#fdd198`, danger `#ff8989`, light
-`#ededed`. The stacks mount no theme folder. Kongeligt is a Bootstrap 3 theme built with
-the deprecated theme-builder module; the 1.18 upgrade retires it and switches
-the site to the stock theme, carrying six colours over into Appearance. The
-old files stay in the data directory under `humhub/themes/Kongeligt` for the
-rewrite, and a rewritten Kongeligt is mounted as a single folder when it
-exists. Mounting the whole `themes` folder would hide the stock theme that
+The site runs the stock theme. Kongeligt, a Bootstrap 3 theme built with the
+deprecated theme-builder module, was retired at the 1.18 upgrade; its six
+colours live on in Appearance (primary `#284764`, accent `#6fdbe8`, success
+`#97d271`, warning `#fdd198`, danger `#ff8989`, light `#ededed`), its login
+background sits where 1.18 keeps its own (`uploads/login-bg/background.png`),
+and its one rule, the logo width on the login page, is pinned as custom SCSS
+in `deploy/humhub.<env>.env`. The old files stay in the data directory under
+`humhub/themes/Kongeligt` for the rewrite, and a rewritten Kongeligt is
+mounted as a single folder when it exists. The stacks mount no theme folder
+until then: mounting the whole `themes` folder would hide the stock theme that
 ships in the image.
 
 The images are the upstream `jeremyvies/humhub` images re-tagged under
@@ -119,64 +120,6 @@ Three kinds of configuration, three places:
 To add a customisation, decide which of the three it is, change the file on
 `staging`, and promote it with the next staging to main pull request.
 
-## Onboarding from the existing stack
-
-The site that runs today is the Container Manager project
-`mriedmann-humhub-latest` on `/volume1/docker/humhub`, with the database
-project `humhub_db` on `/volume1/docker/humhub_db`, and keeps serving until
-the very end. (`/volume1/docker/staging` is a 2024 copy, not the live site.) Nothing here touches it. The new layout is filled
-from a copy, and the production domain moves over when the copy is proven.
-
-1. Copy the data into production's canonical directory with
-   `tools/copy-from-legacy.sh`, which maps the old layout onto the new one.
-   Files are copied while the old site runs; the database directory only with
-   `--database`, after its container is stopped, since a running database
-   cannot be copied consistently. The copy only exists on disk; nothing is
-   started, and the old folders are never mounted by the new stacks:
-
-   ```sh
-   cd /volume1/docker/beboer.denkglfamilie.dk/repo
-   sudo tools/copy-from-legacy.sh
-   sudo /usr/local/bin/docker stop humhub_db && sudo tools/copy-from-legacy.sh --database && sudo /usr/local/bin/docker start humhub_db
-   ```
-
-2. Refresh staging from that copy (`tools/refresh-staging.sh`), which copies
-   the database files as they are when production is not running, and
-   rehearse the upgrade there.
-3. **Do not start the production stack before the window.** Two stacks on the
-   same data send every digest and notification twice.
-
-Beboer's copy also has to climb from 1.15 one minor at a time; the refresh
-and the window both run the ladder, see below.
-
-The cutover is the service window below, with one extra step at the start:
-stop the old stack, and rerun `tools/copy-from-legacy.sh --database` so the
-copy carries everything written since. From then on the old directory is the rollback, until it is deleted.
-
-## Go-live
-
-The one-off cutover from the old stack, after production has been copied,
-converted and migrated as above and parked behind the maintenance page.
-
-1. Rerun "Deploy to staging" and "Deploy to production" by hand (Actions,
-   Run workflow) so `apk upgrade` takes the current Alpine packages; this is
-   how a PHP fix reaches the image. Check it: `docker run --rm --entrypoint php ghcr.io/den-frie-vilje/beboer-humhub:production-latest -v`.
-2. Give the agent its production file, the one on record in this repository:
-   ```sh
-   sudo cp deploy/nas-sites/beboer.denkglfamilie.dk.production.env /volume1/docker/nas-sites/sites.d/ && sudo chmod 0640 /volume1/docker/nas-sites/sites.d/beboer.denkglfamilie.dk.production.env && sudo chown root:docker /volume1/docker/nas-sites/sites.d/beboer.denkglfamilie.dk.production.env
-   ```
-3. Run it: `sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production`.
-   The first start dumps the database if the version changed, migrates, and
-   starts nginx on `localhost:<HUMHUB_PORT>`.
-4. Point the Web Station portal of `beboer.denkglfamilie.dk` at that port instead of the
-   `maintenance` service.
-5. Log in, read Administration, Information.
-6. Stop and later delete the old stack; its directory is the rollback until then.
-7. The modules update themselves at this start, since the version changes
-   from 1.18.6 to 1.19.0; read Administration, Information. Install dark mode
-   once, as the service window describes.
-8. Send a test mail; the transport (smtp.netsite.dk) comes over with the data.
-
 ## Refreshing staging
 
 ```sh
@@ -193,46 +136,21 @@ more than one minor version needs intermediate images, which are run as a
 migration ladder (see `deploy/ladder.yml`) with the marketplace modules
 updated to each core on the way.
 
-Before the first go-live, beboer's copy came from 1.15.2, so the refresh ran
-the ladder:
-
-```sh
-sudo /volume1/docker/beboer.denkglfamilie.dk/repo/tools/refresh-staging.sh \
-  docker.io/jeremyvies/humhub:1.16.2-phponly@sha256:74d74f81857232167e51291f2272995f519c62a3366f045dcb798ef3178a5e04 \
-  docker.io/jeremyvies/humhub:1.17.5-phponly@sha256:3c09fc19a52e7f1dcca302d4e4c94c60a0b9d47f1e24a84fc1a8b43c2e7b110e
-```
-
-It updates every module to its release for each core on the way and
-uninstalls theme-builder, which has no release after 1.17. The Kongeligt
-theme it produced is a Bootstrap 3 theme; 1.18 moved HumHub to Bootstrap 5
-and Sass, so staging at 1.18.6 shows whether Kongeligt needs a rewrite or
-the stock theme takes over.
-
 ## Service window for production
 
 1. Rename `/volume1/docker/nas-sites/sites.d/beboer.denkglfamilie.dk.production.env` to
    `.disabled` so the agent cannot start anything until you say so.
 2. Stop production: `docker compose -p beboer-denkglfamilie-dk-production down`
    (from `/volume1/docker/beboer.denkglfamilie.dk/repo` with the compose file and env file, as
-   the agent runs it). At the first cutover this is the old stack instead,
-   followed by the final copy from "Onboarding from the existing stack".
+   the agent runs it).
 3. Copy `humhub/config` under the data directory to a sibling directory.
    The database needs no copy: the image dumps it into
    `humhub/config/backups` before it migrates.
 4. If staging needed a ladder, run the same images against production with
    `deploy/ladder.yml` now, one after the other.
-5. Start the database alone and run the collation fix (below), before any
-   HumHub container migrates.
-6. Merge `staging` into `main`, wait for the build, rename the `sites.d` file
+5. Merge `staging` into `main`, wait for the build, rename the `sites.d` file
    back, and run the agent: `sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production`.
-7. Log in, read Administration, Information, update the marketplace modules.
-   Once, at the first go-live: install the dark-mode module as on spejdernet,
-   in the running stack:
-   ```sh
-   docker compose -p beboer-denkglfamilie-dk-production -f deploy/compose.production.yml --env-file /volume1/docker/beboer.denkglfamilie.dk/production/production.env exec -w /var/www/localhost/htdocs/protected humhub sh -c "php yii module/install dark-mode && php yii module/enable dark-mode && php yii settings/set dark-mode showButton 1 && php yii cache/flush-all"
-   ```
-8. At the first cutover: point the DSM reverse-proxy vhost of the production
-   domain at `localhost:<HUMHUB_PORT>` of the new stack.
+6. Log in, read Administration, Information, update the marketplace modules.
 
 ### Rollback
 
@@ -254,20 +172,12 @@ sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk
 
 ### Collation fix
 
-The database was created with MariaDB's old default collation, and tables
-created by modules inherited it; HumHub migrations create new tables with the
-database default, so the conversion has to happen before HumHub migrates.
-`tools/fix-collation.sh` converts the database default and every remaining
-table to utf8mb4_unicode_ci and refuses to succeed while any table is left.
-The staging refresh runs it as soon as the copied database is up. In the
-production window, start the database alone, run it, then let the agent
-start the stack:
-
-```sh
-cd /volume1/docker/beboer.denkglfamilie.dk/repo
-sudo docker compose -p beboer-denkglfamilie-dk-production -f deploy/compose.production.yml --env-file /volume1/docker/beboer.denkglfamilie.dk/production/production.env up -d --wait db
-sudo tools/fix-collation.sh production
-```
+HumHub migrations create new tables with the database default, so the
+database default and every table are utf8mb4_unicode_ci, the collation HumHub
+recommends. `tools/fix-collation.sh` converts whatever is left and refuses to
+succeed while any table remains; the staging refresh runs it as soon as the
+copied database is up, so a table that slipped in with another collation is
+caught on staging, before the production deploy migrates it.
 
 ## Mail
 
