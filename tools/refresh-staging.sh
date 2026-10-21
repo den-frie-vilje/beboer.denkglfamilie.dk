@@ -5,8 +5,9 @@
 #   sudo tools/refresh-staging.sh [intermediate phponly image ...]
 #
 # Any images given are run as a migration ladder (deploy/ladder.yml) between
-# the copy and the start of staging's own version. Production keeps running;
-# the database is dumped with a single transaction.
+# the copy and the start of staging's own version. A running production is
+# dumped with a single transaction; a production that is not running (before
+# the first cutover) has its database files copied as they are.
 set -eu
 
 DOMAIN=beboer.denkglfamilie.dk
@@ -25,20 +26,33 @@ stage() { docker compose -p beboer-denkglfamilie-dk-staging -f "$REPO/deploy/com
 echo "1/6 stopping staging"
 stage down --remove-orphans
 
-echo "2/6 dumping the production database"
-mkdir -p "$S_DATA/db"
-prod exec -T db sh -c 'mysqldump --single-transaction --quick -uroot -p"$MYSQL_ROOT_PASSWORD" humhub' > "$S_DATA/db/production.sql"
+AT_REST=""
+if [ -z "$(prod ps --quiet db 2>/dev/null)" ]; then
+  AT_REST=1
+  echo "2/6 production is not running: its database files are copied as they are"
+  mkdir -p "$S_DATA/db"
+else
+  echo "2/6 dumping the production database"
+  mkdir -p "$S_DATA/db"
+  prod exec -T db sh -c 'mysqldump --single-transaction --quick -uroot -p"$MYSQL_ROOT_PASSWORD" humhub' > "$S_DATA/db/production.sql"
+fi
 
 echo "3/6 copying files (uploads, config, modules, themes, assets)"
 mkdir -p "$S_DATA/humhub"
 rsync -a --delete "$P_DATA/humhub/" "$S_DATA/humhub/"
 
-echo "4/6 recreating the staging database from the dump"
-rm -rf "$S_DATA/db/data"
-mkdir -p "$S_DATA/db/data"
-stage up -d --wait db
-stage exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" humhub' < "$S_DATA/db/production.sql"
-rm -f "$S_DATA/db/production.sql"
+if [ -n "$AT_REST" ]; then
+  echo "4/6 copying the database files"
+  rsync -a --delete "$P_DATA/db/data/" "$S_DATA/db/data/"
+  stage up -d --wait db
+else
+  echo "4/6 recreating the staging database from the dump"
+  rm -rf "$S_DATA/db/data"
+  mkdir -p "$S_DATA/db/data"
+  stage up -d --wait db
+  stage exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" humhub' < "$S_DATA/db/production.sql"
+  rm -f "$S_DATA/db/production.sql"
+fi
 
 for IMG in "$@"; do
   echo "5/6 migrating through $IMG"

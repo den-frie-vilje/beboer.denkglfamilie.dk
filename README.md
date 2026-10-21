@@ -69,21 +69,47 @@ The operator runs these by hand; the agent has no write access to any of it.
    `localhost:<MAILCATCHER_PORT>`; reach it through an SSH tunnel or a vhost
    of its own.
 
-Production is the stack that ran before this repository existed. Its data
-stays where it is; `deploy/production.env.example` points there. Onboarding
-it is the first deploy: stop the old stack, disable it so it does not come
-back on reboot, and run the agent for `beboer.denkglfamilie.dk production`. The compose file is
-the old one with a loopback bind and the utf8mb4 server default added, at 1.15.6 instead of the 1.15.2 whose image is no longer published. Staging then walks the copy up one minor at a time, since HumHub advises against skipping minors:
+## Onboarding from the existing stack
 
-```sh
-sudo /volume1/docker/beboer.denkglfamilie.dk/repo/tools/refresh-staging.sh \
-  docker.io/jeremyvies/humhub:1.16.2-phponly@sha256:74d74f81857232167e51291f2272995f519c62a3366f045dcb798ef3178a5e04 \
-  docker.io/jeremyvies/humhub:1.17.5-phponly@sha256:3c09fc19a52e7f1dcca302d4e4c94c60a0b9d47f1e24a84fc1a8b43c2e7b110e
-```
+The site that runs today is the Container Manager project
+`mriedmann-humhub-latest` on `/volume1/docker/humhub`, with the database
+project `humhub_db` on `/volume1/docker/humhub_db`, and keeps serving until
+the very end. (`/volume1/docker/staging` is a 2024 copy, not the live site.) Nothing here touches it. The new layout is filled
+from a copy, and the production domain moves over when the copy is proven.
 
-Check the information page and the marketplace modules at 1.17.5 as well:
-1.18 moved HumHub from Bootstrap 3 to Bootstrap 5, and a theme or module from
-the 1.15 days stops rendering there.
+1. Copy the data into production's directory, mapping the old layout onto the
+   new one. Nothing is started; the copy only exists on disk:
+
+   ```sh
+   P=/volume1/docker/beboer.denkglfamilie.dk/production/data
+   sudo mkdir -p $P/humhub $P/db
+   sudo rsync -a /volume1/docker/humhub/unprotected_uploads/ $P/humhub/uploads/
+   sudo rsync -a /volume1/docker/humhub/modules/ $P/humhub/modules/
+   sudo rsync -a /volume1/docker/humhub/themes/  $P/humhub/themes/
+   sudo rsync -a /volume1/docker/humhub/config/  $P/humhub/config/
+   sudo mkdir -p $P/humhub/assets $P/humhub/php-pages
+   sudo rsync -a /volume1/docker/humhub_db/data/ $P/db/data/
+   ```
+
+   The old stack has no `assets` or `php-pages`; HumHub rebuilds the first and
+   the second stays empty. Its `uploads` folder is a leftover of an older
+   path and is empty; the live uploads are `unprotected_uploads`. The old
+   database is MariaDB 10.2, and the new stack starts 10.4 with
+   `MARIADB_AUTO_UPGRADE`, which runs the system-table upgrade on first start. The database directory is copied
+   at rest, so stop the old database container for the minutes it takes, or
+   accept that the copy is a rehearsal copy and redo it in the window.
+2. Refresh staging from that copy (`tools/refresh-staging.sh`), which copies
+   the database files as they are when production is not running, and
+   rehearse the upgrade there.
+3. **Do not start the production stack before the window.** Two stacks on the
+   same data send every digest and notification twice.
+
+Beboer's copy also has to climb from 1.15 one minor at a time; the refresh
+and the window both run the ladder, see below.
+
+The cutover is the service window below, with one extra step at the start:
+stop the old stack, and redo step 1 so the copy carries everything written
+since. From then on the old directory is the rollback, until it is deleted.
 
 ## Refreshing staging
 
@@ -102,7 +128,8 @@ started. The first refresh copies everything; later ones copy the delta.
    `.disabled` so the agent cannot start anything until you say so.
 2. Stop production: `docker compose -p beboer-denkglfamilie-dk-production down`
    (from `/volume1/docker/beboer.denkglfamilie.dk/repo` with the compose file and env file, as
-   the agent runs it).
+   the agent runs it). At the first cutover this is the old stack instead,
+   followed by the final copy from "Onboarding from the existing stack".
 3. Back up `db/data` and `humhub/config` under the data directory. On
    Btrfs, `cp -a --reflink=always` is instant; otherwise rsync to a sibling
    directory.
@@ -113,6 +140,8 @@ started. The first refresh copies everything; later ones copy the delta.
 6. Merge `staging` into `main`, wait for the build, rename the `sites.d` file
    back, and run the agent: `sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production`.
 7. Log in, read Administration, Information, update the marketplace modules.
+8. At the first cutover: point the DSM reverse-proxy vhost of the production
+   domain at `localhost:<HUMHUB_PORT>` of the new stack.
 
 ### Collation fix
 
