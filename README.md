@@ -47,6 +47,14 @@ the data is frozen from the backup to the moment the new version answers.
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `.github/workflows/deploy-<env>.yml` | Builds and signs that environment's images when the Dockerfiles change |
 
+The stacks mount no theme folder. Kongeligt is a Bootstrap 3 theme built with
+the deprecated theme-builder module; the 1.18 upgrade retires it and switches
+the site to the stock theme, carrying six colours over into Appearance. The
+old files stay in the data directory under `humhub/themes/Kongeligt` for the
+rewrite, and a rewritten Kongeligt is mounted as a single folder when it
+exists. Mounting the whole `themes` folder would hide the stock theme that
+ships in the image.
+
 The images are the upstream `jeremyvies/humhub` images re-tagged under
 `ghcr.io/den-frie-vilje/beboer-humhub` and `beboer-nginx`. The agent only
 deploys a stack that contains at least one image signed by nas-sites' own
