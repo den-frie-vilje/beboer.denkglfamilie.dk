@@ -43,6 +43,7 @@ the data is frozen from the backup to the moment the new version answers.
 | `deploy/<env>.env.example` | Template for the env file on the NAS |
 | `deploy/nas-sites/beboer.denkglfamilie.dk.<env>.env` | The agent's config for that environment, on record |
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
+| `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `.github/workflows/deploy-<env>.yml` | Builds and signs that environment's images when the Dockerfiles change |
 
@@ -77,27 +78,19 @@ project `humhub_db` on `/volume1/docker/humhub_db`, and keeps serving until
 the very end. (`/volume1/docker/staging` is a 2024 copy, not the live site.) Nothing here touches it. The new layout is filled
 from a copy, and the production domain moves over when the copy is proven.
 
-1. Copy the data into production's directory, mapping the old layout onto the
-   new one. Nothing is started; the copy only exists on disk:
+1. Copy the data into production's canonical directory with
+   `tools/copy-from-legacy.sh`, which maps the old layout onto the new one.
+   Files are copied while the old site runs; the database directory only with
+   `--database`, after its container is stopped, since a running database
+   cannot be copied consistently. The copy only exists on disk; nothing is
+   started, and the old folders are never mounted by the new stacks:
 
    ```sh
-   P=/volume1/docker/beboer.denkglfamilie.dk/production/data
-   sudo mkdir -p $P/humhub $P/db
-   sudo rsync -a /volume1/docker/humhub/unprotected_uploads/ $P/humhub/uploads/
-   sudo rsync -a /volume1/docker/humhub/modules/ $P/humhub/modules/
-   sudo rsync -a /volume1/docker/humhub/themes/  $P/humhub/themes/
-   sudo rsync -a /volume1/docker/humhub/config/  $P/humhub/config/
-   sudo mkdir -p $P/humhub/assets $P/humhub/php-pages
-   sudo rsync -a /volume1/docker/humhub_db/data/ $P/db/data/
+   cd /volume1/docker/beboer.denkglfamilie.dk/repo
+   sudo tools/copy-from-legacy.sh
+   sudo /usr/local/bin/docker stop humhub_db && sudo tools/copy-from-legacy.sh --database && sudo /usr/local/bin/docker start humhub_db
    ```
 
-   The old stack has no `assets` or `php-pages`; HumHub rebuilds the first and
-   the second stays empty. Its `uploads` folder is a leftover of an older
-   path and is empty; the live uploads are `unprotected_uploads`. The old
-   database is MariaDB 10.2, and the new stack starts 10.4 with
-   `MARIADB_AUTO_UPGRADE`, which runs the system-table upgrade on first start. The database directory is copied
-   at rest, so stop the old database container for the minutes it takes, or
-   accept that the copy is a rehearsal copy and redo it in the window.
 2. Refresh staging from that copy (`tools/refresh-staging.sh`), which copies
    the database files as they are when production is not running, and
    rehearse the upgrade there.
@@ -108,8 +101,8 @@ Beboer's copy also has to climb from 1.15 one minor at a time; the refresh
 and the window both run the ladder, see below.
 
 The cutover is the service window below, with one extra step at the start:
-stop the old stack, and redo step 1 so the copy carries everything written
-since. From then on the old directory is the rollback, until it is deleted.
+stop the old stack, and rerun `tools/copy-from-legacy.sh --database` so the
+copy carries everything written since. From then on the old directory is the rollback, until it is deleted.
 
 ## Refreshing staging
 
