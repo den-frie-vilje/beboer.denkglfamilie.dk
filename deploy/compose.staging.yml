@@ -1,0 +1,108 @@
+# Staging stack for beboer.denkglfamilie.dk: compose.production.yml plus a mail catcher.
+# Staging runs on a copy of production's data that tools/refresh-staging.sh
+# makes and neutralises, so nothing staging does reaches a member: every
+# mail ends in the catcher (web UI on MAILCATCHER_PORT) and the push module
+# is removed from the copy.
+
+name: beboer-staging
+
+services:
+  nginx:
+    image: ghcr.io/den-frie-vilje/beboer-nginx:staging-latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HUMHUB_PORT}:80"
+    environment:
+      TZ: Europe/Copenhagen
+      NGINX_CLIENT_MAX_BODY_SIZE: 256m
+    volumes:
+      - "${DATA_DIR}/humhub/uploads:/var/www/localhost/htdocs/uploads"
+      - "${DATA_DIR}/humhub/assets:/var/www/localhost/htdocs/assets"
+      - "${DATA_DIR}/humhub/modules:/var/www/localhost/htdocs/protected/modules"
+      - "${DATA_DIR}/humhub/themes:/var/www/localhost/htdocs/themes"
+    depends_on:
+      - humhub
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  humhub:
+    image: ghcr.io/den-frie-vilje/beboer-humhub:staging-latest
+    restart: unless-stopped
+    expose:
+      - "9000"
+    environment:
+      HUMHUB_DB_USER: ${DB_USER}
+      HUMHUB_DB_PASSWORD: ${DB_PASSWORD}
+      HUMHUB_DB_HOST: db
+      HUMHUB_DB_NAME: humhub
+      HUMHUB_AUTO_INSTALL: 1
+      HUMHUB_PROTO: https
+      HUMHUB_HOST: beboer-denkglfamilie-dk.stage.denfrievilje.dk
+      HUMHUB_CACHE_EXPIRE_TIME: 3600
+      HUMHUB_CACHE_CLASS: yii\redis\Cache
+      HUMHUB_QUEUE_CLASS: humhub\modules\queue\driver\Redis
+      HUMHUB_REDIS_HOSTNAME: redis
+      HUMHUB_REDIS_PORT: 6379
+      PHP_POST_MAX_SIZE: 256M
+      PHP_UPLOAD_MAX_FILESIZE: 250M
+      PHP_MAX_EXECUTION_TIME: 60
+      PHP_MEMORY_LIMIT: 5G
+      PHP_TIMEZONE: Europe/Copenhagen
+      INTEGRITY_CHECK: 1
+      TZ: Europe/Copenhagen
+    volumes:
+      - "${DATA_DIR}/humhub/uploads:/var/www/localhost/htdocs/uploads"
+      - "${DATA_DIR}/humhub/assets:/var/www/localhost/htdocs/assets"
+      - "${DATA_DIR}/humhub/modules:/var/www/localhost/htdocs/protected/modules"
+      - "${DATA_DIR}/humhub/themes:/var/www/localhost/htdocs/themes"
+      - "${DATA_DIR}/humhub/config:/var/www/localhost/htdocs/protected/config"
+      - "${DATA_DIR}/humhub/php-pages:/var/www/localhost/htdocs/php-pages"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "php-fpm-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: mariadb:10.4@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3
+    restart: unless-stopped
+    # The server default used to be latin1_swedish_ci, which module tables
+    # inherited. New tables now default to what HumHub recommends.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: humhub
+      TZ: Europe/Copenhagen
+    volumes:
+      - "${DATA_DIR}/db/data:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--silent"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:5.0-alpine@sha256:1a3c609295332f1ce603948142a132656c92a08149d7096e203058533c415b8c
+    restart: unless-stopped
+    expose:
+      - "6379"
+    environment:
+      TZ: Europe/Copenhagen
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  mailer:
+    image: sj26/mailcatcher:v0.11.0@sha256:572048324658d2198e0a96785cca4f0260f2c4cadb2cb057bd837b9ee0c60533
+    restart: unless-stopped
+    expose:
+      - "1025"
+    ports:
+      - "127.0.0.1:${MAILCATCHER_PORT}:1080"

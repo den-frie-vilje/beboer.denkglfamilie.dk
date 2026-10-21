@@ -1,0 +1,29 @@
+# Builds and signs the production images when the Dockerfiles change on the main
+# branch. The nas-sites agent on the NAS verifies the signatures and pulls
+# within a few minutes of the build, so for production the merge to main is
+# the deploy: see README.md for the service-window procedure. The two jobs
+# run in sequence because the shared workflow serialises on (repository,
+# environment), and a cancelled run leaves an unsigned tag.
+
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+    paths: [deploy/Dockerfile.humhub, deploy/Dockerfile.nginx]
+  workflow_dispatch:
+
+jobs:
+  humhub:
+    uses: den-frie-vilje/nas-sites/.github/workflows/build-and-sign.yml@v1
+    with:
+      environment: production
+      dockerfile: deploy/Dockerfile.humhub
+      image-name: ghcr.io/den-frie-vilje/beboer-humhub
+  nginx:
+    needs: humhub
+    uses: den-frie-vilje/nas-sites/.github/workflows/build-and-sign.yml@v1
+    with:
+      environment: production
+      dockerfile: deploy/Dockerfile.nginx
+      image-name: ghcr.io/den-frie-vilje/beboer-nginx

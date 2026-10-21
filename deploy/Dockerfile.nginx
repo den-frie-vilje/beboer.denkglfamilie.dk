@@ -1,0 +1,2 @@
+# HumHub 1.15.6. Bump both Dockerfiles together.
+FROM docker.io/jeremyvies/humhub:1.15.6-nginx@sha256:c1559a9d1d76db5bc1cda5539a0ba241311b693296b845a373b734ca2fb27406

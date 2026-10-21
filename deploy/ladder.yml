@@ -1,0 +1,15 @@
+# Override for running one HumHub version's migrations against an
+# environment's data without deploying that version. Used when the data has
+# to pass through intermediate releases (HumHub advises against skipping
+# minor versions); tools/refresh-staging.sh takes the images as arguments,
+# and the production procedure in README.md runs the same command by hand:
+#
+#   LADDER_IMAGE=docker.io/jeremyvies/humhub:1.16.2-phponly@sha256:... \
+#   docker compose -p <project> -f deploy/compose.<env>.yml -f deploy/ladder.yml \
+#     --env-file /volume1/docker/<domain>/<env>/<env>.env run --rm humhub true
+#
+# The image's entrypoint runs the migrations and then executes `true`
+# instead of php-fpm, so the container exits once the migrations are done.
+services:
+  humhub:
+    image: ${LADDER_IMAGE:?set LADDER_IMAGE to the intermediate phponly image}
