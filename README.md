@@ -46,6 +46,7 @@ the data is frozen from the backup to the moment the new version answers.
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
 | `tools/copy-from-legacy.sh` | One-off copy of the site that runs today into the canonical layout |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
+| `tools/fix-collation.sh` | Converts the database default and every table to utf8mb4_unicode_ci, before HumHub migrates |
 | `.github/workflows/deploy-<env>.yml` | Builds and signs that environment's images when the Dockerfiles change |
 
 The stacks mount no theme folder. Kongeligt is a Bootstrap 3 theme built with
@@ -154,8 +155,8 @@ the stock theme takes over.
    directory.
 4. If staging needed a ladder, run the same images against production with
    `deploy/ladder.yml` now, one after the other.
-5. Run the collation fix if Administration, Information still warns about it
-   (below).
+5. Start the database alone and run the collation fix (below), before any
+   HumHub container migrates.
 6. Merge `staging` into `main`, wait for the build, rename the `sites.d` file
    back, and run the agent: `sudo -u deploy /volume1/docker/nas-sites/deploy-agent.sh beboer.denkglfamilie.dk production`.
 7. Log in, read Administration, Information, update the marketplace modules.
@@ -165,22 +166,19 @@ the stock theme takes over.
 ### Collation fix
 
 The database was created with MariaDB's old default collation, and tables
-created by modules inherited it. HumHub's own 2018 migration converted the
-core tables; this applies the same statements to the rest. Run it against the
-database before the new version starts:
+created by modules inherited it; HumHub migrations create new tables with the
+database default, so the conversion has to happen before HumHub migrates.
+`tools/fix-collation.sh` converts the database default and every remaining
+table to utf8mb4_unicode_ci and refuses to succeed while any table is left.
+The staging refresh runs it as soon as the copied database is up. In the
+production window, start the database alone, run it, then let the agent
+start the stack:
 
-```sql
-ALTER DATABASE humhub CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-SET FOREIGN_KEY_CHECKS=0;
--- one line per table the information page lists, for example:
-ALTER TABLE custom_pages_page_setting CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-SET FOREIGN_KEY_CHECKS=1;
-SELECT table_name, table_collation FROM information_schema.tables
- WHERE table_schema='humhub' AND table_collation <> 'utf8mb4_unicode_ci';
+```sh
+cd /volume1/docker/beboer.denkglfamilie.dk/repo
+sudo docker compose -p beboer-denkglfamilie-dk-production -f deploy/compose.production.yml --env-file /volume1/docker/beboer.denkglfamilie.dk/production/production.env up -d --wait db
+sudo tools/fix-collation.sh production
 ```
-
-The last query must come back empty. The compose files also set the server
-default to utf8mb4, so new tables no longer inherit the old collation.
 
 ## Mail
 
