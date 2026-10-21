@@ -81,6 +81,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: humhub
+      # Runs mysql_upgrade when the data directory comes from an older server.
+      MARIADB_AUTO_UPGRADE: 1
       TZ: Europe/Copenhagen
     volumes:
       - "${DATA_DIR}/db/data:/var/lib/mysql"
