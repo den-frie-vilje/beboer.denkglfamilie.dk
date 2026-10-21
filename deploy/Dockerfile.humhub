@@ -5,3 +5,7 @@
 # longer published; 1.15.6 is the last 1.15, so onboarding production to the
 # agent is a patch update.
 FROM docker.io/jeremyvies/humhub:1.15.6-phponly@sha256:5b202e2194b9a58c631bf768157608d32fa9b2d0373a01d277cef4c3c043f8bc
+# Alpine security updates at build time, so a PHP or nginx fix ships as soon as
+# Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
+# the workflow by hand (workflow_dispatch) to pick up a new fix.
+RUN apk --no-cache upgrade

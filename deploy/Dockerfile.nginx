@@ -1,2 +1,6 @@
 # HumHub 1.15.6. Bump both Dockerfiles together.
 FROM docker.io/jeremyvies/humhub:1.15.6-nginx@sha256:c1559a9d1d76db5bc1cda5539a0ba241311b693296b845a373b734ca2fb27406
+# Alpine security updates at build time, so a PHP or nginx fix ships as soon as
+# Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
+# the workflow by hand (workflow_dispatch) to pick up a new fix.
+RUN apk --no-cache upgrade
