@@ -54,6 +54,7 @@ if [ -n "$AT_REST" ]; then
   echo "4/6 copying the database files"
   rsync -a --delete "$P_DATA/db/data/" "$S_DATA/db/data/"
   stage up -d --wait db
+  "$REPO/tools/fix-collation.sh" staging
 else
   echo "4/6 recreating the staging database from the dump"
   rm -rf "$S_DATA/db/data"
@@ -61,6 +62,7 @@ else
   stage up -d --wait db
   stage exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" humhub' < "$S_DATA/db/production.sql"
   rm -f "$S_DATA/db/production.sql"
+  "$REPO/tools/fix-collation.sh" staging
 fi
 
 for IMG in "$@"; do
