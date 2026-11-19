@@ -1,0 +1,16 @@
+# main receives the staging branch and nothing else; see AGENTS.md. The
+# ruleset on main requires this job, so a pull request from any other branch
+# cannot be merged.
+name: Merge train
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  from-staging:
+    name: main receives staging
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          [ "$GITHUB_HEAD_REF" = staging ] && exit 0
+          echo "::error::main receives only the staging branch; open this pull request against staging"
+          exit 1
