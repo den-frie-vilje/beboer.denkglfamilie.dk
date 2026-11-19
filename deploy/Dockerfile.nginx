@@ -1,15 +1,9 @@
-# HumHub 1.19.0. Bump both Dockerfiles together.
-FROM docker.io/jeremyvies/humhub:1.19.0-nginx@sha256:450cc9708807d55c32e720764947300d7f55b38e8f4eb46410aded5d78caa47c
+# HumHub 1.19.4. Bump both Dockerfiles together.
+FROM ghcr.io/den-frie-vilje/humhub-nginx:1.19.4@sha256:1ab3c185462b5e813c539ac18aa80af483fac6e39ff204b2942b1bc4bd90c574
 # Alpine security updates at build time, so a PHP or nginx fix ships as soon as
 # Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
 # the workflow by hand (workflow_dispatch) to pick up a new fix.
 RUN apk --no-cache upgrade
-# The translations endpoint's category is checked before PHP sees it; see the
-# file for the advisory. The entrypoint's envsubst touches NGINX_* only, so the
-# nginx variables survive it.
-COPY deploy/nginx-i18n-category.conf /tmp/i18n-category.conf
-RUN sed -i '/server_name _ default;/r /tmp/i18n-category.conf' /etc/nginx/nginx.conf && rm /tmp/i18n-category.conf \
- && grep -q i18n_category_rejected /etc/nginx/nginx.conf
 # Plain HTTP answers with a redirect to HTTPS. DSM's reverse proxy marks the
 # scheme in X-Forwarded-Proto, so an HTTP rule in DSM for the site's name,
 # pointing at the same port as the HTTPS rule, ends up here; the health check

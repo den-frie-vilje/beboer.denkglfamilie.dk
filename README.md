@@ -30,9 +30,11 @@ builds `production-latest`. An upgrade is:
    marketplace modules are updated to their releases for the new core
    (`deploy/entrypoint.d/20-update-modules.sh`).
 
-Every push of the Dockerfiles is checked before anything is built
-(`tools/check-version.sh`): both files at one version, the digests as Docker
-Hub serves them for that tag, the image's own version file matching, and no
+The images are built by the organisation's fork, den-frie-vilje/humhub-docker,
+and published on GHCR; upstream stopped publishing at 1.19.0. Every push of
+the Dockerfiles is checked before anything is built (`tools/check-version.sh`):
+both files at one version, the digests as GHCR serves them for that tag, the
+image's own version file matching, and no
 minor version skipped, which HumHub advises against. Dependabot opens patch
 bumps as one pull request for both files. A fix in the base image's
 packages, PHP included, needs no version bump: rerun the environment's
