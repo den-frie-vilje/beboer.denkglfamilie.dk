@@ -95,7 +95,13 @@ services:
     volumes:
       - "${DATA_DIR}/db/data:/var/lib/mysql"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "--silent"]
+      # The image's own check: `--connect` fails on the temporary server the
+      # first start runs without networking while it creates the users, and
+      # `mysqladmin ping` did not (it reports alive even when access is denied),
+      # so a refresh restored its dump into a root account that had no password
+      # yet (2026-11-20). The entrypoint creates the healthcheck user, on an
+      # existing data directory too under MARIADB_AUTO_UPGRADE.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 30s
       timeout: 10s
       retries: 3
