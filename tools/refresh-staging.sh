@@ -8,6 +8,10 @@
 # the copy and the start of staging's own version. A running production is
 # dumped with a single transaction; a production that is not running has its
 # database files copied as they are.
+# Staging comes up on the image the agent last verified and pulled; the script
+# pulls nothing itself, since the agent's signature check is the only gate an
+# image passes on its way onto the NAS. A rebuild the agent has not fetched yet
+# is swapped in on its next pass, one more restart without a migration.
 set -eu
 # Container Manager installs docker in /usr/local/bin, which sudo's secure_path
 # on DSM leaves out ("docker: command not found" under sudo, 2026-11-20).
