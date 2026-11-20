@@ -9,6 +9,9 @@
 # dumped with a single transaction; a production that is not running has its
 # database files copied as they are.
 set -eu
+# Container Manager installs docker in /usr/local/bin, which sudo's secure_path
+# on DSM leaves out ("docker: command not found" under sudo, 2026-11-20).
+PATH=/usr/local/bin:$PATH
 
 DOMAIN=beboer.denkglfamilie.dk
 ROOT=/volume1/docker/$DOMAIN
