@@ -69,6 +69,12 @@ else
   stage up -d --wait db
   stage exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" humhub' < "$S_DATA/db/production.sql"
   rm -f "$S_DATA/db/production.sql"
+  # The copied dynamic.php names production's root password, and this fresh
+  # server has staging's; HumHub shows the installer on an access-denied answer
+  # (InstallationState::isDatabaseInstalled, 1.19.4), so the credentials are
+  # rewritten from the container's own environment before anything starts.
+  # Past the entrypoint, which would migrate with the old password first.
+  stage run --rm --entrypoint sh humhub -c 'cd /var/www/localhost/htdocs/protected && php yii installer/write-db-config "$HUMHUB_DB_HOST" "$HUMHUB_DB_NAME" "$HUMHUB_DB_USER" "$HUMHUB_DB_PASSWORD"'
   "$REPO/tools/fix-collation.sh" staging
 fi
 
