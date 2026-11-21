@@ -1,10 +1,10 @@
-# HumHub 1.19.0. Bump both Dockerfiles together; the branch decides the environment
+# HumHub 1.19.4. Bump both Dockerfiles together; the branch decides the environment
 # (staging builds from the staging branch, production from main).
-# The digest is the manifest-list digest Docker Hub shows for the tag.
+# The digest is the one GHCR shows for the tag, built by den-frie-vilje/humhub-docker.
 # The stack that ran before this repository was 1.15.2, whose image is no
 # longer published; 1.15.6 is the last 1.15, so onboarding production to the
 # agent is a patch update.
-FROM docker.io/jeremyvies/humhub:1.19.0-phponly@sha256:f70357eb116ea8e9b25d9216e8292a13a665b58b72b9e2c0d6335ff18d9661d0
+FROM ghcr.io/den-frie-vilje/humhub-phponly:1.19.4@sha256:9d2a305d225bc436dd4c5abb03523ffcf3e391ce8e3ce5a033b28c4a4b5f778f
 # Alpine security updates at build time, so a PHP or nginx fix ships as soon as
 # Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
 # the workflow by hand (workflow_dispatch) to pick up a new fix.

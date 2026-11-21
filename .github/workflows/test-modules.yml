@@ -1,0 +1,19 @@
+# Runs tools/test-modules.sh on a pull request that touches the images, the
+# module list or the test itself: the images are built from the pull request,
+# HumHub is installed on an empty database, every module in deploy/modules.txt
+# is installed and enabled, and the pages are rendered. An image update that
+# breaks a module fails the check before anything is signed.
+
+name: Test modules
+
+on:
+  pull_request:
+    paths: [deploy/**, tools/test-modules.sh]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - run: tools/test-modules.sh
