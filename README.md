@@ -48,11 +48,27 @@ database (`deploy/compose.test.yml`), the test administrator signs in and
 installs and enables every module in `deploy/modules.txt` through the
 marketplace, the marketplace update check and the integrity check run, and
 the dashboard, the directories, the module manager and each module's own
-page are rendered. A module the marketplace has no release for on that core
-fails the check; a paid module downloads only with production's licence and
-is reported, not installed. `deploy/modules.txt` is production's module
-folder: a module installed or removed in the admin interface is added or
-removed there too.
+page are rendered, and the unit and functional suites each module ships run
+against HumHub's own test harness on a second database. A module the
+marketplace has no release for on that core fails the check, as does a failing
+suite; a paid module downloads only with production's licence and is
+reported, not installed. The job summary is a table of how every module
+fared. `deploy/modules.txt` is production's module folder with the version
+each module last passed at: a module installed or removed in the admin
+interface is added or removed there too, and the versions are written by the
+test.
+
+Every day `.github/workflows/update-check.yml` moves the Dockerfiles to the
+newest HumHub the image fork has built (`tools/bump-humhub.sh`), runs the same
+test against it and the module releases the marketplace serves, and only when
+it passes and something is new commits to `staging`, builds the staging
+images and opens or refreshes the pull request to `main`, with the table in
+its description and the owner as reviewer. Staging then runs the new core or
+modules within minutes (the image carries `deploy/modules.txt`, and
+`deploy/entrypoint.d/20-update-modules.sh` updates the modules when it
+changes); the review on staging is by hand, and the merge builds production.
+A failing test fails the daily run, which GitHub reports, and nothing moves
+until a release passes.
 
 Rollback is the dump: see "Rollback" under the service window. Nothing
 shortens the window itself; the data is frozen from the dump to the moment
@@ -73,15 +89,17 @@ the new version answers.
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `deploy/pre-start.sh` | The image's entrypoint: dumps the database before an upgrade migrates it |
-| `deploy/entrypoint.d/20-update-modules.sh` | Updates the marketplace modules once, after a core upgrade has migrated |
+| `deploy/entrypoint.d/20-update-modules.sh` | Updates the marketplace modules after a core upgrade has migrated and when the tested module list in the image changes |
 | `tools/check-version.sh` | The version-bump check the workflows run before building |
-| `tools/test-modules.sh` | Installs the modules in `deploy/modules.txt` on a fresh HumHub built from the pull request and renders their pages |
-| `deploy/modules.txt` | The marketplace modules production runs, one id per line |
+| `tools/test-modules.sh` | Installs the modules in `deploy/modules.txt` on a fresh HumHub built from the pull request, renders their pages and runs their unit and functional suites |
+| `tools/bump-humhub.sh` | Moves the Dockerfiles to the newest HumHub the image fork has built |
+| `deploy/modules.txt` | The marketplace modules production runs, one id per line with the version the test last passed at |
 | `deploy/compose.test.yml` | The throwaway stack the module test runs on an empty database |
 | `tools/fix-collation.sh` | Converts the database default and every table to utf8mb4_unicode_ci, before HumHub migrates |
 | `.github/workflows/deploy-<env>.yml` | Checks the version bump, then builds and signs that environment's images when the Dockerfiles change |
 | `.github/workflows/check-version.yml` | The same check on a pull request |
 | `.github/workflows/test-modules.yml` | The module test on a pull request |
+| `.github/workflows/update-check.yml` | The daily check for HumHub and module releases that updates staging and asks for the review |
 
 The site runs the stock theme. Kongeligt, a Bootstrap 3 theme built with the
 deprecated theme-builder module, was retired at the 1.18 upgrade; its six

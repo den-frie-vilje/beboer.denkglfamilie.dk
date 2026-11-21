@@ -1,0 +1,68 @@
+# Every day: moves the Dockerfiles to the newest HumHub the image fork has
+# built (tools/bump-humhub.sh), runs tools/test-modules.sh against that core
+# and the module releases the marketplace serves for it, and only when it
+# passes and something is new: commits to staging, has the staging images
+# built (the NAS pulls them within minutes, and the module update runs at
+# start), and opens or refreshes the pull request to main asking for a review.
+# A failing test fails the run, which GitHub reports, and nothing moves; the
+# next day tries again with whatever has been released since. The push and
+# the pull request come from the workflow token, which starts no other
+# workflow, so the staging build is dispatched by hand here and the pull
+# request shows the test from this run instead of a check.
+
+name: Check for updates
+
+on:
+  schedule:
+    - cron: '20 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency: update-check
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: staging
+          fetch-depth: 0
+      - run: tools/bump-humhub.sh
+      - run: tools/test-modules.sh
+      - name: Commit to staging, build it, ask for the review
+        run: |
+          git add deploy/Dockerfile.humhub deploy/Dockerfile.nginx deploy/modules.txt
+          git diff --cached --quiet && { echo "nothing new today"; exit 0; }
+          VERSION=$(sed -nE 's|^FROM ghcr.io/den-frie-vilje/humhub-phponly:([0-9.]+)@.*|\1|p' deploy/Dockerfile.humhub)
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -F - <<MSG
+          Updates the module test passed with: HumHub $VERSION, modules as listed
+
+          Committed by the daily update check; the test's table is in the
+          pull request to main.
+          MSG
+          git push origin HEAD:staging
+          gh workflow run deploy-staging.yml --ref staging
+          {
+            echo "The daily update check passed tools/test-modules.sh with HumHub $VERSION and the module versions now in deploy/modules.txt. The staging images are being built from this commit and the NAS pulls them within minutes; staging then runs this."
+            echo
+            echo "Verify on staging, then merge: the merge builds production."
+            echo
+            cat "$GITHUB_STEP_SUMMARY"
+          } > body.md
+          NUMBER=$(gh pr list --base main --head staging --state open --json number --jq '.[0].number')
+          if [ -n "$NUMBER" ]; then
+            gh pr edit "$NUMBER" --title "Release HumHub $VERSION and the tested module versions" --body-file body.md
+            gh pr comment "$NUMBER" --body "Refreshed by today's update check: HumHub $VERSION; the table in the description is from this run."
+          else
+            gh pr create --base main --head staging --title "Release HumHub $VERSION and the tested module versions" --body-file body.md --reviewer olekristensen
+          fi
