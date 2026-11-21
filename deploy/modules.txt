@@ -1,0 +1,26 @@
+# The marketplace modules this community runs, one id per line, in the order
+# production's protected/modules folder lists them
+# (/volume1/docker/beboer.denkglfamilie.dk/production/data/humhub/modules).
+# tools/test-modules.sh installs them on a fresh HumHub built from this
+# repository's Dockerfiles, so a pull request shows whether the image still
+# carries every one of them. A module added or removed in the admin interface
+# is added or removed here too.
+auto-follow
+birthday
+breakingnews
+calendar
+cfiles
+custom_pages
+dark-mode
+gallery
+homepage
+jitsi-meet
+legal
+mail
+massuserimport
+meeting
+mostactiveusers
+polls
+rest
+tasks
+wiki
