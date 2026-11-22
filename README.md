@@ -95,6 +95,7 @@ the new version answers.
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `deploy/pre-start.sh` | The image's entrypoint: dumps the database before an upgrade migrates it |
 | `deploy/entrypoint.d/20-update-modules.sh` | Installs the modules the image's list names and updates them all, after a core upgrade has migrated and when the list changes |
+| `deploy/entrypoint.d/30-office-settings.sh` | Points the euro-office module at the environment's document server on every start: the address from the compose file, the JWT secret from `/volume1/docker/secrets/office-<env>/office.env`, which the document server's stack (den-frie-vilje/onlyoffice.denfrievilje.dk) reads too |
 | `tools/check-version.sh` | The version-bump check the workflows run before building |
 | `tools/test-modules.sh` | Installs the modules in `deploy/modules.txt` on a fresh HumHub built from the pull request, renders their pages and runs their unit and functional suites |
 | `tools/bump-humhub.sh` | Moves the Dockerfiles to the newest HumHub the image fork has built |
