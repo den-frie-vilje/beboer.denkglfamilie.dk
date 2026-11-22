@@ -10,7 +10,7 @@ name: Deploy to staging
 on:
   push:
     branches: [staging]
-    paths: [deploy/Dockerfile.humhub, deploy/Dockerfile.nginx, deploy/pre-start.sh]
+    paths: [deploy/Dockerfile.humhub, deploy/Dockerfile.nginx, deploy/pre-start.sh, deploy/modules.txt]
   workflow_dispatch:
 
 jobs:
