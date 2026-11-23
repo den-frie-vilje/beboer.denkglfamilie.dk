@@ -55,9 +55,9 @@ services:
       PHP_TIMEZONE: Europe/Copenhagen
       INTEGRITY_CHECK: 1
       TZ: Europe/Copenhagen
-      # This environment's document server; see
+      # The document server, one for both environments; see
       # deploy/entrypoint.d/30-office-settings.sh.
-      OFFICE_URL: https://onlyoffice-denfrievilje-dk.stage.denfrievilje.dk
+      OFFICE_URL: https://onlyoffice.denfrievilje.dk
     volumes:
       - "${DATA_DIR}/humhub/uploads:/var/www/localhost/htdocs/uploads"
       - "${DATA_DIR}/humhub/assets:/var/www/localhost/htdocs/assets"
@@ -70,10 +70,10 @@ services:
       - "../deploy/entrypoint.d/10-common-config.sh:/docker-entrypoint.d/10-common-config.sh:ro"
       - "../deploy/entrypoint.d/20-update-modules.sh:/docker-entrypoint.d/20-update-modules.sh:ro"
       - "../deploy/entrypoint.d/30-office-settings.sh:/docker-entrypoint.d/30-office-settings.sh:ro"
-      # The folder with the document server's JWT secret for this environment,
+      # The folder with the document server's JWT secret,
       # shared with the document server's stack. The folder, not the file: a
       # missing file would make Docker create a folder in its place.
-      - "/volume1/docker/secrets/office-staging:/run/office:ro"
+      - "/volume1/docker/secrets/office:/run/office:ro"
       - "../deploy/common.site.php:/var/www/localhost/htdocs/protected/config/common.site.php:ro"
       - "../deploy/humhub.staging.env:/var/www/localhost/htdocs/.env:ro"
     depends_on:
