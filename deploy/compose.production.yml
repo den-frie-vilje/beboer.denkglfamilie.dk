@@ -112,7 +112,7 @@ services:
       start_period: 300s
 
   redis:
-    image: redis:5.0-alpine@sha256:1a3c609295332f1ce603948142a132656c92a08149d7096e203058533c415b8c
+    image: redis:8.12-alpine@sha256:5af80107c1eeecb484a2269b80a26d12bfa6521787da4663bd9f19f60a163483
     restart: unless-stopped
     expose:
       - "6379"
