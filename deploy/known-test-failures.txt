@@ -1,0 +1,18 @@
+# Tests a module release is known to fail on this core, one per line:
+# module, suite, test as codecept names it (file:method), with the reason on
+# the line above. tools/test-modules.sh passes on exactly this signature:
+# every other test must pass, and a listed test that passes again is
+# reported so its line can go. The module code is never changed.
+
+# breakingnews 1.1.2: fails in the module's own CI too
+# (humhub-contrib/breakingnews, Codeception workflows red since 2026-11-16).
+breakingnews functional BreakingNewsCest.php:testNewsActivation
+
+# mail 3.4.6: the functional suite loads no fixtures of its own (no
+# DynamicFixtureHelper in functional.suite.yml) and passes upstream only
+# because the api suite runs before it and leaves the users behind.
+mail functional SendMailCest.php:testSendMail
+
+# rest 0.12.7 refuses to be enabled without URL rewriting ("Please enable URL
+# Rewriting"), which the test console does not have; it enables on the web.
+rest console console-enable

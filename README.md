@@ -31,13 +31,49 @@ builds `production-latest`. An upgrade is:
    (`deploy/entrypoint.d/20-update-modules.sh`).
 
 Every push of the Dockerfiles is checked before anything is built
-(`tools/check-version.sh`): both files at one version, the digests as Docker
-Hub serves them for that tag, the image's own version file matching, and no
+(`tools/check-version.sh`): both files at one version, the digests as GHCR
+serves them for that tag, the image's own version file matching, and no
 minor version skipped, which HumHub advises against. Dependabot opens patch
 bumps as one pull request for both files. A fix in the base image's
 packages, PHP included, needs no version bump: rerun the environment's
 deploy workflow by hand (Actions, Run workflow), the build's `apk upgrade`
 takes the current packages, and the agent pulls the new image.
+
+Every pull request to `staging` runs `tools/test-modules.sh`: the two images
+are built from the pull request, HumHub is installed on an empty
+database (`deploy/compose.test.yml`), the test administrator signs in and
+installs and enables every module in `deploy/modules.txt` through the
+marketplace, the marketplace update check and the integrity check run, and
+the dashboard, the directories, the module manager and each module's own
+page are rendered, and the unit and functional suites each module ships run
+against HumHub's own test harness on a second database. A module the
+marketplace has no release for on that core fails the check, as does a failing
+test that is not listed in `deploy/known-test-failures.txt`, which names
+the tests a module release is known to fail and why; a paid module downloads only with production's licence and is
+reported, not installed. The job summary is a table of how every module
+fared. `deploy/modules.txt` is production's module folder with the version
+each module last passed at: a module installed or removed in the admin
+interface is added or removed there too, and the versions are written by the
+test. What the entrypoint installs is the marketplace's current release for
+the core at that start, which is the tested version unless the module was
+released again since; the next daily run tests that release.
+
+Every day `.github/workflows/update-check.yml` moves the Dockerfiles to the
+newest HumHub the image fork has built (`tools/bump-humhub.sh`), runs the same
+test against it and the module releases the marketplace serves, and only when
+every module passes and something is new brings the tree to `staging` through
+a pull request, builds the staging images and opens or refreshes the pull
+request to `main`, with the table in its description and the owner as
+reviewer. `staging` takes pull requests only, each with a passing `test`
+status (the repository ruleset), so a failing test cannot reach it by any
+route. Staging then runs the new core or
+modules within minutes (the image carries `deploy/modules.txt`, and
+`deploy/entrypoint.d/20-update-modules.sh` updates the modules when it
+changes); the review on staging is by hand, and the merge builds production.
+A failing test fails the daily run, which GitHub reports, and nothing moves
+until a release passes. GitHub runs schedules from the default branch, so the
+daily check fires once the workflow is on `main`; it checks out `staging`
+either way.
 
 Rollback is the dump: see "Rollback" under the service window. Nothing
 shortens the window itself; the data is frozen from the dump to the moment
@@ -58,11 +94,18 @@ the new version answers.
 | `deploy/ladder.yml` | Override for running an intermediate version's migrations without deploying it |
 | `tools/refresh-staging.sh` | Copies production's data to staging and neutralises it |
 | `deploy/pre-start.sh` | The image's entrypoint: dumps the database before an upgrade migrates it |
-| `deploy/entrypoint.d/20-update-modules.sh` | Updates the marketplace modules once, after a core upgrade has migrated |
+| `deploy/entrypoint.d/20-update-modules.sh` | Installs the modules the image's list names and updates them all, after a core upgrade has migrated and when the list changes |
 | `tools/check-version.sh` | The version-bump check the workflows run before building |
+| `tools/test-modules.sh` | Installs the modules in `deploy/modules.txt` on a fresh HumHub built from the pull request, renders their pages and runs their unit and functional suites |
+| `tools/bump-humhub.sh` | Moves the Dockerfiles to the newest HumHub the image fork has built |
+| `deploy/modules.txt` | The marketplace modules production runs, one id per line with the version the test last passed at |
+| `deploy/known-test-failures.txt` | The tests a module release is known to fail on this core, with the reason; the test passes on exactly that signature |
+| `deploy/compose.test.yml` | The throwaway stack the module test runs on an empty database |
 | `tools/fix-collation.sh` | Converts the database default and every table to utf8mb4_unicode_ci, before HumHub migrates |
 | `.github/workflows/deploy-<env>.yml` | Checks the version bump, then builds and signs that environment's images when the Dockerfiles change |
 | `.github/workflows/check-version.yml` | The same check on a pull request |
+| `.github/workflows/test-modules.yml` | The module test on a pull request |
+| `.github/workflows/update-check.yml` | The daily check for HumHub and module releases that updates staging and asks for the review |
 
 The site runs the stock theme. Kongeligt, a Bootstrap 3 theme built with the
 deprecated theme-builder module, was retired at the 1.18 upgrade; its six
@@ -76,11 +119,17 @@ mounted as a single folder when it exists. The stacks mount no theme folder
 until then: mounting the whole `themes` folder would hide the stock theme that
 ships in the image.
 
-The images are the upstream `jeremyvies/humhub` images re-tagged under
-`ghcr.io/den-frie-vilje/beboer-humhub` and `beboer-nginx`. The agent only
-deploys a stack that contains at least one image signed by nas-sites' own
-workflow, which is what the re-tag provides. After the first build, make both
-GHCR packages public, or the NAS cannot pull them.
+The base images, `ghcr.io/den-frie-vilje/humhub-phponly` and `humhub-nginx`,
+are built by the organisation's fork of humhub-docker
+([den-frie-vilje/humhub-docker](https://github.com/den-frie-vilje/humhub-docker)):
+its `versions.txt` names the HumHub version and its Build workflow publishes
+both on every push to main. The upstream `jeremyvies/humhub` images stopped at
+1.19.0. The site images add the Alpine upgrade, the ImageMagick coders and
+`pre-start.sh` on top and are published as `beboer-humhub` and
+`beboer-nginx`. The agent only deploys a stack that contains at least one
+image signed by nas-sites' own workflow, which is what the site build provides.
+After the first build, make both GHCR packages public, or the NAS cannot pull
+them.
 
 ## One-time setup on the NAS
 

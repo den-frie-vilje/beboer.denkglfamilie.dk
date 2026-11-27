@@ -1,10 +1,10 @@
-# HumHub 1.19.0. Bump both Dockerfiles together; the branch decides the environment
+# HumHub 1.19.4. Bump both Dockerfiles together; the branch decides the environment
 # (staging builds from the staging branch, production from main).
-# The digest is the manifest-list digest Docker Hub shows for the tag.
+# The digest is the one GHCR shows for the tag, built by den-frie-vilje/humhub-docker.
 # The stack that ran before this repository was 1.15.2, whose image is no
 # longer published; 1.15.6 is the last 1.15, so onboarding production to the
 # agent is a patch update.
-FROM docker.io/jeremyvies/humhub:1.19.0-phponly@sha256:f70357eb116ea8e9b25d9216e8292a13a665b58b72b9e2c0d6335ff18d9661d0
+FROM ghcr.io/den-frie-vilje/humhub-phponly:1.19.4@sha256:3acb68af3dc170cee84db8ccb51aeabde7524cc0c373169a03ce1e440b84d60c
 # Alpine security updates at build time, so a PHP or nginx fix ships as soon as
 # Alpine has it, without waiting for the upstream image to be rebuilt. Re-run
 # the workflow by hand (workflow_dispatch) to pick up a new fix.
@@ -14,6 +14,13 @@ RUN apk --no-cache upgrade
 RUN apk --no-cache add imagemagick-heic imagemagick-webp
 # The database is dumped before every upgrade migration; see deploy/pre-start.sh.
 RUN apk --no-cache add mariadb-client
+# Alpine ships php-intl with icu-data-en, ICU's English locale data only, so
+# German and Danish dates were formatted in English (calendar's own tests
+# caught it); the full data set brings every locale.
+RUN apk --no-cache add icu-data-full
+# The modules the test last passed with, read by
+# deploy/entrypoint.d/20-update-modules.sh.
+COPY deploy/modules.txt /usr/local/share/humhub-modules.txt
 COPY --chmod=755 deploy/pre-start.sh /usr/local/bin/pre-start
 ENTRYPOINT ["/usr/local/bin/pre-start"]
 # ENTRYPOINT resets the image's CMD, so it is repeated from upstream.

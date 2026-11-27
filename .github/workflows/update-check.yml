@@ -1,0 +1,95 @@
+# Every day: moves the Dockerfiles to the newest HumHub the image fork has
+# built (tools/bump-humhub.sh) and runs tools/test-modules.sh against that
+# core and the module releases the marketplace serves for it. Only when every
+# module passes and something is new does anything move: the change goes to
+# staging through a pull request, the staging images are built (the NAS pulls
+# them within minutes and the module update runs at start), and the pull
+# request to main is opened or refreshed asking for the review. A failing test
+# fails the run, which GitHub reports, and nothing moves; the next day tries
+# again with whatever has been released since.
+#
+# staging only accepts pull requests whose head carries a passing "test"
+# status (the repository ruleset "staging by pull request"). The workflow
+# token starts no other workflow, so the run that tested this very tree sets
+# that status on the commit it makes, merges, and dispatches the staging build
+# itself.
+
+name: Check for updates
+
+on:
+  schedule:
+    # 05:20 UTC: the image fork looks for a HumHub release at 02:00 UTC and
+    # its build publishes well within the hours between.
+    - cron: '20 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+  actions: write
+
+concurrency: update-check
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: staging
+          fetch-depth: 0
+      - run: tools/bump-humhub.sh
+      - run: tools/test-modules.sh
+      - name: Bring the passing tree to staging and ask for the review
+        run: |
+          git add deploy/Dockerfile.humhub deploy/Dockerfile.nginx deploy/modules.txt
+          git diff --cached --quiet && { echo "nothing new today"; exit 0; }
+          VERSION=$(sed -nE 's|^FROM ghcr.io/den-frie-vilje/humhub-phponly:([0-9.]+)@.*|\1|p' deploy/Dockerfile.humhub)
+          TITLE="Updates the module test passed with: HumHub $VERSION, modules as listed"
+          BRANCH=update/$(date -u +%Y-%m-%d)-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
+          git commit -q -m "$TITLE" -m "Committed by the daily update check; the test's table is in the pull request."
+          git push origin "$BRANCH"
+          SHA=$(git rev-parse HEAD)
+          {
+            echo "The daily update check passed tools/test-modules.sh on this tree: HumHub $VERSION and the module versions now in deploy/modules.txt."
+            echo
+            cat "$GITHUB_STEP_SUMMARY"
+          } > body.md
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success -f context=test -f description="tools/test-modules.sh passed in the update check" -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+          gh pr create --base staging --head "$BRANCH" --title "$TITLE" --body-file body.md
+          # GitHub computes mergeability after the status lands; a few tries.
+          for try in 1 2 3 4 5 6; do
+            gh pr merge "$BRANCH" --merge --delete-branch && break
+            [ "$try" -lt 6 ] || exit 1
+            sleep 10
+          done
+          gh workflow run deploy-staging.yml --ref staging
+      - name: Keep the release pull request to main current
+        # Runs whenever staging is ahead of main in deploy/, also after a failed
+        # step, so a day that fails after the merge, or a change merged by hand,
+        # still ends in the pull request Ole reviews.
+        if: ${{ !cancelled() }}
+        run: |
+          git fetch -q origin main staging
+          [ -n "$(git log --oneline origin/main..origin/staging -- deploy/Dockerfile.humhub deploy/modules.txt)" ] || { echo "main has staging's deploy/ already"; exit 0; }
+          VERSION=$(git show origin/staging:deploy/Dockerfile.humhub | sed -nE 's|^FROM ghcr.io/den-frie-vilje/humhub-phponly:([0-9.]+)@.*|\1|p')
+          TITLE="Release HumHub $VERSION and the tested module versions"
+          {
+            echo "Staging runs this: HumHub $VERSION and the module versions in deploy/modules.txt, brought there by the daily update check once tools/test-modules.sh passed on every module. Verify on staging, then merge; the merge builds production."
+            echo
+            [ -f body.md ] && cat body.md || echo "No change today; the table is in the update check run that merged the last change."
+          } > release.md
+          NUMBER=$(gh pr list --base main --head staging --state open --json number --jq '.[0].number')
+          if [ -n "$NUMBER" ]; then
+            gh pr edit "$NUMBER" --title "$TITLE" --body-file release.md
+            [ -f body.md ] && gh pr comment "$NUMBER" --body "Refreshed by today's update check: HumHub $VERSION; the table in the description is from this run."
+          else
+            gh pr create --base main --head staging --title "$TITLE" --body-file release.md --reviewer olekristensen
+          fi

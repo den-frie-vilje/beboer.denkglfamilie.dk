@@ -1,0 +1,264 @@
+#!/bin/sh
+# Proves that the HumHub image built from this repository still carries the
+# community's marketplace modules: brings deploy/compose.test.yml up on an
+# empty database, signs in as the test administrator, installs and enables
+# every module in deploy/modules.txt through the marketplace the way an
+# administrator does, renders the pages the modules take part in, and runs
+# the unit and functional tests each module ships. A table at the end says
+# how every module fared; on GitHub it is the job summary. Runs on a pull
+# request (.github/workflows/test-modules.yml), every day against the newest
+# releases (.github/workflows/update-check.yml) and anywhere with Docker:
+# tools/test-modules.sh. Exit 0 is a pass, and a pass writes the module
+# versions it ran with into deploy/modules.txt; the stack is removed either
+# way, and a failure prints the container log first.
+set -eu
+cd "$(dirname "$0")/.."
+
+compose() { docker compose -f deploy/compose.test.yml "$@"; }
+# The console runs as the web user so the files it writes stay writable for
+# the web application.
+yii() { compose exec -T -u nginx -w /var/www/localhost/htdocs/protected humhub php yii "$@"; }
+
+URL=http://127.0.0.1:18080
+JAR=$(mktemp)
+BODY=$(mktemp)
+ROWS=$(mktemp)
+finish() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "--- last response, error lines"
+    sed -e 's/<[^>]*>//g' "$BODY" | grep -iE 'error|exception' | head -20 || true
+    echo "--- humhub container log, last 100 lines"
+    compose logs --no-color --tail 100 humhub || true
+  fi
+  compose down -v --remove-orphans > /dev/null 2>&1 || true
+  rm -f "$JAR" "$BODY" "$BODY.known" "$BODY.failing" "$ROWS"
+  exit "$status"
+}
+trap finish EXIT
+fail() { echo "FAIL: $*"; exit 1; }
+
+# Prints the status code; the body lands in $BODY.
+page() { curl -sS -o "$BODY" --max-time 120 -b "$JAR" -c "$JAR" -w '%{http_code}' "$@"; }
+# The CSRF token of the page in $BODY; Yii issues a new one at sign-in.
+token() { grep -oE 'name="csrf-token" content="[^"]+"' "$BODY" | cut -d'"' -f4; }
+# One line of the table per module: id|version|installed|unit|functional.
+row() { echo "$1|$2|$3|$4|$5" >> "$ROWS"; }
+
+echo "1/5 building the images and installing HumHub on an empty database"
+compose up -d --build --wait --wait-timeout 900
+
+echo "2/5 signing in as the test administrator"
+# Sign-in is two steps since 1.19: the username, then the password
+# (humhub/modules/user/controllers/AuthController.php, actionLogin and actionPassword).
+page "$URL/user/auth/login" > /dev/null
+code=$(page "$URL/user/auth/login" --data-urlencode "_csrf=$(token)" --data-urlencode 'Login[username]=admin')
+[ "$code" = 302 ] || fail "the username step answered $code"
+page "$URL/user/auth/password" > /dev/null
+code=$(page "$URL/user/auth/password" --data-urlencode "_csrf=$(token)" --data-urlencode 'Login[password]=test-modules')
+[ "$code" = 302 ] || fail "the password step answered $code"
+code=$(page "$URL/dashboard")
+[ "$code" = 200 ] || fail "the dashboard answered $code after sign-in"
+CSRF=$(token)
+
+echo "3/5 installing and enabling the modules in deploy/modules.txt"
+# Through the marketplace pages rather than the console: the console
+# installer runs without third-party modules loaded, and a module whose
+# requirements.php looks one up (external_calendar needs calendar) fails there.
+# The marketplace is asked first, as HumHub asks it (HumHubApiClient sends
+# the core version): a paid module downloads only with the licence production
+# holds, so it is reported and left out; a module without a release for this
+# core is the failure this test exists for.
+VERSION=$(compose exec -T humhub cat /usr/src/humhub/.version | tr -d 'v[:space:]')
+# A line starting with - names a module the entrypoint removes; not installed here.
+MODULES=$(grep -vE '^[[:space:]]*(#|-|$)' deploy/modules.txt | cut -d' ' -f1)
+INSTALLED=""
+MISSING=""
+for m in $MODULES; do
+  INFO=$(curl -sS --max-time 60 "https://api.humhub.com/v1/modules/info?id=$m&version=$VERSION&installId=test")
+  case "$INFO" in
+    *'"isPaid":true'*) echo "  paid $m downloads only with the licence; not installed in the test"; row "$m" "" "paid, outside the test" "" ""; continue ;;
+    *'"latestCompatibleVersion":{'*) ;;
+    *) echo "  NONE $m has no release for HumHub $VERSION"; MISSING="$MISSING $m"; row "$m" "" "NO RELEASE for $VERSION" "" ""; continue ;;
+  esac
+  for action in install enable; do
+    code=$(page "$URL/marketplace/browse/$action" --data-urlencode "_csrf=$CSRF" --data-urlencode "moduleId=$m")
+    [ "$code" = 200 ] || fail "$action of $m answered $code"
+  done
+  echo "  $m installed and enabled"
+  INSTALLED="$INSTALLED $m"
+done
+LIST=$(yii module/list)
+printf '%s\n' "$LIST"
+for m in $INSTALLED; do
+  printf '%s\n' "$LIST" | grep -qE "^  $m +enabled " || fail "$m is not enabled"
+done
+# The marketplace serves releases per core version; every module must be at
+# the release it serves for this core, and the integrity check must pass.
+yii module/update-all
+yii integrity/run
+LIST=$(yii module/list)
+version() { printf '%s\n' "$LIST" | awk -v m="$1" '$1 == m { print $3 }'; }
+
+echo "4/5 rendering the pages and reading the application log"
+# A page passes with 200 and no error page in the body. A module without a
+# page of its own answers 404 to every candidate path; that is reported, not
+# failed, since the module's widgets are rendered by the pages below.
+render() {
+  code=$(page "$URL$1")
+  case "$code" in
+    200) grep -q 'An internal server error occurred' "$BODY" && fail "$1 rendered the error page"; echo "  200 $1"; return 0 ;;
+    404) return 1 ;;
+    *) fail "$1 answered $code" ;;
+  esac
+}
+for p in /dashboard /people /spaces /admin/module/list; do
+  render "$p" || fail "$p answered 404"
+done
+# /admin/module/list is the module manager; it names every installed module.
+for m in $INSTALLED; do
+  grep -q "moduleId=$m\b" "$BODY" || fail "the module manager does not list $m"
+done
+for m in $INSTALLED; do
+  for p in /$m/admin /$m/config /$m/global /$m/index; do
+    render "$p" && break
+  done || echo "  none $m has no page of its own"
+done
+ERRORS=$(compose exec -T humhub sh -c 'cat /var/www/localhost/htdocs/protected/runtime/logs/app.log' | grep -E '\[error\]' || true)
+[ -z "$ERRORS" ] || { printf '%s\n' "$ERRORS"; fail "errors in protected/runtime/logs/app.log"; }
+
+echo "5/5 running the unit and functional tests the modules ship"
+# Most marketplace modules ship Codeception suites, and the image carries
+# HumHub's test harness (protected/humhub/tests, index-test.php) but not the
+# development packages the suites load, so the throwaway container gets them:
+# composer and the tokenizer from Alpine, the dev packages from HumHub's own
+# composer.lock. The harness expects a humhub_test database on 127.0.0.1 as
+# root (tests/config/common.php); the env file it merges last
+# (tests/codeception/config/config.php) points it at the db service. The
+# steps are those of humhub/module-coding-standards
+# .github/workflows/codeception-base.yml, which tests one module on a fresh
+# database: migrate, installer/auto, codecept build, then the module's suites
+# in the order codecept runs them, functional before unit. Each module gets
+# that fresh database here too, so nothing a suite leaves behind reaches the
+# next module, and is enabled in it first, since migrate/up only covers
+# enabled modules (humhub/commands/MigrateController.php). Acceptance suites drive Chrome
+# through Selenium and are left out. The module code is never touched: a
+# failing suite is the module's state on this core, and the daily run tries
+# the next release until it passes.
+compose exec -T humhub apk add --no-cache -q composer php85-tokenizer
+compose exec -T -u nginx -w /var/www/localhost/htdocs humhub composer install --no-interaction --no-progress --quiet
+compose exec -T humhub sh -c 'cat > /var/www/localhost/htdocs/protected/humhub/tests/config/env/env.php' <<'PHP'
+<?php
+return ['components' => ['db' => ['dsn' => 'mysql:host=db;dbname=humhub_test', 'username' => 'root', 'password' => 'root']]];
+PHP
+# The harness console runs under YII_ENV test, where Yii exits 0 on an
+# unhandled exception (yii\base\ErrorHandler::$silentExitOnException), so
+# each call is judged by its output, not its exit code.
+harness() { compose exec -T -u nginx -w /var/www/localhost/htdocs/protected/humhub/tests/codeception/bin humhub php yii "$@" 2>&1; }
+# printf, not echo: dash's echo reads the backslashes in PHP class names
+# as escapes and stops at \c.
+expect() { out=$(cat); printf '%s\n' "$out" | grep -qE "$1" || { printf '%s\n' "$out" | tail -20; fail "the test harness did not $2"; }; }
+fresh_test_database() {
+  # The harness caches settings and the installation state in a file cache
+  # (tests/config/common.php, @runtime/tests/cache); a console booting on an
+  # empty database with the previous module's cache believes it installed and
+  # fails, so the cache goes first, without booting anything.
+  compose exec -T humhub rm -rf /var/www/localhost/htdocs/protected/runtime/tests/cache
+  compose exec -T db mariadb -uroot -proot -e 'DROP DATABASE IF EXISTS humhub_test; CREATE DATABASE humhub_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+  harness migrate/up --includeModuleMigrations=1 --interactive=0 | expect 'Migrated up successfully|No new migrations found' 'migrate the fresh test database'
+  harness installer/auto | expect '^Install Site:' 'install the fresh test database'
+}
+compose exec -T -u nginx -w /var/www/localhost/htdocs/protected/humhub/tests humhub php ../../vendor/bin/codecept build --no-interaction 2>&1 | expect 'UnitTesterActions.php generated successfully' 'build its actor classes'
+FAILED=""
+# The failures a module release is known to have on this core, one per line
+# in deploy/known-test-failures.txt: module, suite, test. A run passes on the
+# same signature: every other test must pass, and a listed test that passes
+# again is reported so its line can go.
+known() { grep -E "^$1 $2 " deploy/known-test-failures.txt | cut -d' ' -f3 | sort -u > "$BODY.known" || true; }
+# Runs one suite and prints its cell for the table.
+suite() {
+  # A suite folder without a test file is no suite; codecept cannot even
+  # start some of them (lets-meet's empty functional folder).
+  [ -n "$(compose exec -T humhub find "/var/www/localhost/htdocs/protected/modules/$1/tests/codeception/$2" -name '*Cest.php' -o -name '*Test.php' 2>/dev/null | head -1)" ] || { echo "none"; return; }
+  out=$(compose exec -T -u nginx -w "/var/www/localhost/htdocs/protected/modules/$1/tests" humhub php /var/www/localhost/htdocs/protected/vendor/bin/codecept run "$2" --no-interaction --no-colors 2>&1) || true
+  case "$out" in
+    *"No tests executed"*|*"could not be found"*) echo "none"; return ;;
+  esac
+  tests=$(printf '%s\n' "$out" | grep -oE '(OK \(|Tests: )[0-9]+' | tail -1 | grep -oE '[0-9]+$' || true)
+  # codecept names each failing test as " Test  codeception/<suite>/<file>:<method>".
+  failing=$(printf '%s\n' "$out" | sed -nE "s|^ Test  codeception/$2/||p" | sort -u)
+  [ -n "$tests" ] || failing="did-not-run"
+  judge "$1" "$2" "$failing" "${tests:-0}"
+}
+# Compares a suite's failing tests with the known ones and prints the cell.
+judge() {
+  known "$1" "$2"
+  unexpected=$(printf '%s\n' "$3" | grep -v '^$' | grep -vxFf "$BODY.known" || true)
+  again=$(printf '%s\n' "$3" | grep -v '^$' > "$BODY.failing" || true; grep -vxFf "$BODY.failing" "$BODY.known" || true)
+  [ -z "$again" ] || echo "  $1 $2: known failure passes again, remove from deploy/known-test-failures.txt: $again" >&2
+  if [ -n "$unexpected" ]; then
+    printf '%s\n' "$out" | grep -vE '^\s*#[0-9]+ ' | grep -A6 -E '^[0-9]+\) ' | head -80 >&2
+    echo "FAIL: $(echo $unexpected)"
+  elif [ "$2" = console ]; then
+    echo "known failure: console enable"
+  elif [ -s "$BODY.failing" ]; then
+    echo "ok, $4 tests, $(wc -l < "$BODY.failing" | tr -d ' ') known failing"
+  else
+    echo "ok, $4 tests"
+  fi
+}
+for m in $INSTALLED; do
+  if compose exec -T humhub test -f "/var/www/localhost/htdocs/protected/modules/$m/tests/codeception.yml"; then
+    fresh_test_database
+    # A module with its own composer.json gets its packages, as the upstream
+    # workflow's "Install module dependencies" step does.
+    if compose exec -T humhub test -f "/var/www/localhost/htdocs/protected/modules/$m/composer.json"; then
+      compose exec -T -u nginx -w "/var/www/localhost/htdocs/protected/modules/$m" humhub composer install --no-interaction --no-progress --quiet
+    fi
+    # The module is enabled through the console as HumHub's own module/install
+    # would; a module that breaks there is reported, since its suites would
+    # only fail on the missing tables.
+    ENABLE=$(harness module/enable "$m")
+    if printf '%s\n' "$ENABLE" | grep -q "Module $m enabled"; then
+      f=$(suite "$m" functional); u=$(suite "$m" unit)
+    else
+      out=$ENABLE
+      f=$(judge "$m" console console-enable 0); u=$f
+    fi
+    echo "  $m unit: $u; functional: $f"
+    case "$u$f" in *FAIL*) FAILED="$FAILED $m" ;; esac
+    row "$m" "$(version "$m")" yes "$u" "$f"
+  else
+    echo "  $m ships no tests"
+    row "$m" "$(version "$m")" yes "none" "none"
+  fi
+done
+
+echo
+echo "How the modules fared on HumHub $VERSION"
+printf '%-18s %-9s %-24s %-18s %s\n' Module Version Installed 'Unit tests' 'Functional tests'
+tr '|' '\t' < "$ROWS" | while IFS="$(printf '\t')" read -r a b c d e; do printf '%-18s %-9s %-24s %-18s %s\n' "$a" "$b" "$c" "$d" "$e"; done
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    echo "## How the modules fared on HumHub $VERSION"
+    echo
+    echo "| Module | Version | Installed | Unit tests | Functional tests |"
+    echo "|---|---|---|---|---|"
+    sed -e 's/^/| /' -e 's/|/ | /g' -e 's/$/ |/' "$ROWS"
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
+echo
+
+# Reported last so one run shows everything else as well.
+[ -z "$FAILED" ] || fail "module tests failed:$FAILED"
+[ -z "$MISSING" ] || fail "the marketplace has no release for HumHub $VERSION of:$MISSING"
+# The versions this pass ran with, behind each id in deploy/modules.txt; the
+# image carries the file and deploy/entrypoint.d/20-update-modules.sh updates
+# the modules when it changes.
+printf '%s\n' "$LIST" > "$BODY"
+awk 'NR == FNR { if (NF >= 3) ver[$1] = $3; next }
+  /^[[:space:]]*(#|-|$)/ { print; next }
+  { if ($1 in ver) print $1, ver[$1]; else print }' "$BODY" deploy/modules.txt > "$BODY.new"
+cat "$BODY.new" > deploy/modules.txt
+rm -f "$BODY.new"
+echo "PASS: $(echo "$INSTALLED" | wc -w | tr -d ' ') modules installed, enabled, rendering and passing their tests"

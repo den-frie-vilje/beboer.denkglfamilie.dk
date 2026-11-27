@@ -1,0 +1,22 @@
+# Runs tools/test-modules.sh on every pull request to staging: the images are
+# built from the pull request, HumHub is installed on an empty database, every
+# module in deploy/modules.txt is installed and enabled, the pages are rendered
+# and each module's unit and functional suites run. An image or module update
+# that breaks a module fails the check before anything is signed. It runs on
+# every pull request, not only those touching deploy/, because staging takes a
+# pull request only with this check passing (the repository ruleset), and a
+# required check that never reports would block the pull request.
+
+name: Test modules
+
+on:
+  pull_request:
+    branches: [staging]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - run: tools/test-modules.sh
