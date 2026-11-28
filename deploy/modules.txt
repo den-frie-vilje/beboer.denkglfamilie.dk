@@ -24,6 +24,6 @@ massuserimport
 meeting
 mostactiveusers 0.3.2
 polls 1.5.2
-rest 0.12.7
+rest 0.12.8
 tasks 1.10.4
 wiki 2.6.5
